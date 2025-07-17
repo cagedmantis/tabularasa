@@ -269,12 +269,14 @@ class TabManager {
             this.elements.tabsContainer.appendChild(ungroupedElement);
         }
 
-        // Render grouped tabs
-        Object.entries(groupedTabs).forEach(([groupKey, tabs]) => {
-            if (groupKey !== 'ungrouped' && tabs.length > 0) {
-                const groupElement = this.createTabGroup(groupKey, tabs);
-                this.elements.tabsContainer.appendChild(groupElement);
-            }
+        // Render grouped tabs, sorted by number of entries (descending)
+        const sortedGroups = Object.entries(groupedTabs)
+            .filter(([groupKey, tabs]) => groupKey !== 'ungrouped' && tabs.length > 0)
+            .sort(([, tabsA], [, tabsB]) => tabsB.length - tabsA.length);
+            
+        sortedGroups.forEach(([groupKey, tabs]) => {
+            const groupElement = this.createTabGroup(groupKey, tabs);
+            this.elements.tabsContainer.appendChild(groupElement);
         });
     }
 
@@ -389,6 +391,13 @@ class TabManager {
         selectAllBtn.addEventListener('click', () => this.selectAllTabsInGroup(tabs));
         actions.appendChild(selectAllBtn);
         
+        // Unselect All button for domain groupings
+        const unselectAllBtn = document.createElement('button');
+        unselectAllBtn.className = 'btn btn-small btn-secondary';
+        unselectAllBtn.textContent = 'Unselect All';
+        unselectAllBtn.addEventListener('click', () => this.unselectAllTabsInGroup(tabs));
+        actions.appendChild(unselectAllBtn);
+        
         if (tabGroup) {
             const collapseBtn = document.createElement('button');
             collapseBtn.className = 'btn btn-small btn-secondary';
@@ -426,32 +435,91 @@ class TabManager {
         tabElement.className = `tab-item ${tab.active ? 'active' : ''} ${this.selectedTabs.has(tab.id) ? 'selected' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.audible ? 'audible' : ''}`;
         tabElement.dataset.tabId = tab.id.toString();
 
-        const favicon = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
+        // Create checkbox
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'tab-checkbox';
+        checkbox.checked = this.selectedTabs.has(tab.id);
+        tabElement.appendChild(checkbox);
+
+        // Create favicon
+        const favicon = document.createElement('img');
+        favicon.className = 'tab-favicon';
+        favicon.alt = 'Favicon';
+        favicon.src = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
+        tabElement.appendChild(favicon);
+
+        // Create single line content with title and truncated URL
+        const content = document.createElement('div');
+        content.className = 'tab-content';
         
-        tabElement.innerHTML = `
-            <input type="checkbox" class="tab-checkbox" ${this.selectedTabs.has(tab.id) ? 'checked' : ''}>
-            <img src="${favicon}" class="tab-favicon" alt="Favicon">
-            <div class="tab-content">
-                <div class="tab-title">${this.escapeHtml(tab.title)}</div>
-                <div class="tab-url">${this.escapeHtml(tab.url)}</div>
-            </div>
-            <div class="tab-indicators">
-                ${tab.pinned ? '<div class="tab-indicator pinned">📌</div>' : ''}
-                ${tab.audible ? '<div class="tab-indicator audible">🔊</div>' : ''}
-                ${tab.mutedInfo?.muted ? '<div class="tab-indicator muted">🔇</div>' : ''}
-            </div>
-            <div class="tab-actions">
-                <button class="tab-action ${tab.pinned ? 'pinned' : ''}" title="${tab.pinned ? 'Unpin' : 'Pin'} tab">
-                    ${tab.pinned ? '📌' : '📍'}
-                </button>
-                <button class="tab-action ${tab.mutedInfo?.muted ? 'muted' : ''}" title="${tab.mutedInfo?.muted ? 'Unmute' : 'Mute'} tab">
-                    ${tab.mutedInfo?.muted ? '🔇' : '🔊'}
-                </button>
-                <button class="tab-action close" title="Close tab">
-                    ✕
-                </button>
-            </div>
-        `;
+        const title = document.createElement('span');
+        title.className = 'tab-title';
+        title.textContent = tab.title;
+        
+        const separator = document.createElement('span');
+        separator.className = 'tab-separator';
+        separator.textContent = ' • ';
+        
+        const url = document.createElement('span');
+        url.className = 'tab-url';
+        url.textContent = this.truncateUrl(tab.url);
+        
+        content.appendChild(title);
+        content.appendChild(separator);
+        content.appendChild(url);
+        tabElement.appendChild(content);
+
+        // Create indicators
+        const indicators = document.createElement('div');
+        indicators.className = 'tab-indicators';
+        
+        if (tab.pinned) {
+            const pinIndicator = document.createElement('div');
+            pinIndicator.className = 'tab-indicator pinned';
+            pinIndicator.textContent = '📌';
+            indicators.appendChild(pinIndicator);
+        }
+        
+        if (tab.audible) {
+            const audioIndicator = document.createElement('div');
+            audioIndicator.className = 'tab-indicator audible';
+            audioIndicator.textContent = '🔊';
+            indicators.appendChild(audioIndicator);
+        }
+        
+        if (tab.mutedInfo?.muted) {
+            const muteIndicator = document.createElement('div');
+            muteIndicator.className = 'tab-indicator muted';
+            muteIndicator.textContent = '🔇';
+            indicators.appendChild(muteIndicator);
+        }
+        
+        tabElement.appendChild(indicators);
+
+        // Create actions
+        const actions = document.createElement('div');
+        actions.className = 'tab-actions';
+        
+        const pinBtn = document.createElement('button');
+        pinBtn.className = `tab-action ${tab.pinned ? 'pinned' : ''}`;
+        pinBtn.title = `${tab.pinned ? 'Unpin' : 'Pin'} tab`;
+        pinBtn.textContent = tab.pinned ? '📌' : '📍';
+        actions.appendChild(pinBtn);
+        
+        const muteBtn = document.createElement('button');
+        muteBtn.className = `tab-action ${tab.mutedInfo?.muted ? 'muted' : ''}`;
+        muteBtn.title = `${tab.mutedInfo?.muted ? 'Unmute' : 'Mute'} tab`;
+        muteBtn.textContent = tab.mutedInfo?.muted ? '🔇' : '🔊';
+        actions.appendChild(muteBtn);
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'tab-action close';
+        closeBtn.title = 'Close tab';
+        closeBtn.textContent = '✕';
+        actions.appendChild(closeBtn);
+        
+        tabElement.appendChild(actions);
 
         this.setupTabElementListeners(tabElement, tab);
         return tabElement;
@@ -460,9 +528,10 @@ class TabManager {
     private setupTabElementListeners(tabElement: HTMLElement, tab: TabInfo): void {
         const checkbox = tabElement.querySelector('.tab-checkbox') as HTMLInputElement;
         const content = tabElement.querySelector('.tab-content') as HTMLElement;
-        const pinBtn = tabElement.querySelector('.tab-action:nth-child(1)') as HTMLButtonElement;
-        const muteBtn = tabElement.querySelector('.tab-action:nth-child(2)') as HTMLButtonElement;
-        const closeBtn = tabElement.querySelector('.tab-action.close') as HTMLButtonElement;
+        const actions = tabElement.querySelector('.tab-actions') as HTMLElement;
+        const pinBtn = actions.children[0] as HTMLButtonElement;
+        const muteBtn = actions.children[1] as HTMLButtonElement;
+        const closeBtn = actions.children[2] as HTMLButtonElement;
 
         checkbox.addEventListener('change', (e) => {
             e.stopPropagation();
@@ -723,6 +792,13 @@ class TabManager {
 
     private selectAllTabsInGroup(tabs: TabInfo[]): void {
         tabs.forEach(tab => this.selectedTabs.add(tab.id));
+        this.updateGlobalActions();
+        this.updateTabCount();
+        this.render();
+    }
+
+    private unselectAllTabsInGroup(tabs: TabInfo[]): void {
+        tabs.forEach(tab => this.selectedTabs.delete(tab.id));
         this.updateGlobalActions();
         this.updateTabCount();
         this.render();
@@ -1127,6 +1203,33 @@ class TabManager {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    private truncateUrl(url: string): string {
+        try {
+            const urlObj = new URL(url);
+            const domain = urlObj.hostname;
+            const path = urlObj.pathname + urlObj.search;
+            
+            // Show domain + path, but truncate if too long
+            const maxLength = 60;
+            const fullUrl = domain + path;
+            
+            if (fullUrl.length <= maxLength) {
+                return fullUrl;
+            }
+            
+            // Truncate the path part if too long
+            const availableLength = maxLength - domain.length - 3; // -3 for "..."
+            if (availableLength > 0 && path.length > availableLength) {
+                return domain + path.substring(0, availableLength) + '...';
+            }
+            
+            return domain + '...';
+        } catch {
+            // If URL parsing fails, just truncate the original URL
+            return url.length > 60 ? url.substring(0, 57) + '...' : url;
+        }
     }
 }
 
