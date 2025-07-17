@@ -729,6 +729,8 @@ class TabManager {
             await chrome.tabs.remove(tabId);
             this.selectedTabs.delete(tabId);
             this.showStatusMessage('Tab closed');
+            // Refresh the view immediately after closing
+            await this.refreshTabs();
         } catch (error) {
             console.error('Error closing tab:', error);
             this.showStatusMessage('Error closing tab', 'error');
@@ -743,6 +745,8 @@ class TabManager {
             await chrome.tabs.remove(tabIds);
             this.selectedTabs.clear();
             this.showStatusMessage(`${tabIds.length} tabs closed`);
+            // Refresh the view immediately after closing
+            await this.refreshTabs();
         } catch (error) {
             console.error('Error closing selected tabs:', error);
             this.showStatusMessage('Error closing tabs', 'error');
@@ -755,6 +759,8 @@ class TabManager {
                 const tabIds = tabs.map(tab => tab.id);
                 await chrome.tabs.remove(tabIds);
                 this.showStatusMessage(`${tabIds.length} tabs closed from ${groupKey}`);
+                // Refresh the view immediately after closing
+                await this.refreshTabs();
             }
         } catch (error) {
             console.error('Error closing tab group:', error);
@@ -783,6 +789,8 @@ class TabManager {
                 }
                 
                 this.showStatusMessage(`${tabIds.length} tabs closed from ${groupKey}`);
+                // Refresh the view immediately after closing
+                await this.refreshTabs();
             }
         } catch (error) {
             console.error('Error closing tab group:', error);
