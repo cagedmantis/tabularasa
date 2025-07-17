@@ -37,6 +37,7 @@ help:
 	@echo "  zip            - Create ZIP file for Chrome Web Store"
 	@echo "  store-prep     - Chrome Web Store preparation checklist"
 	@echo "  validate-manifest - Validate manifest.json for Chrome Web Store"
+	@echo "  screenshots    - Generate Chrome Web Store screenshots"
 	@echo ""
 	@echo "Git & Release:"
 	@echo "  status         - Show git status and branch info"
@@ -175,6 +176,12 @@ validate-manifest:
 	@grep -q '"version"' manifest.json && echo "✅ Version field present" || echo "❌ Version field missing"
 	@grep -q '"description"' manifest.json && echo "✅ Description field present" || echo "❌ Description field missing"
 	@grep -q '"icons"' manifest.json && echo "✅ Icons field present" || echo "❌ Icons field missing"
+
+.PHONY: screenshots
+screenshots:
+	@echo "Chrome Web Store Screenshots Generator"
+	@echo "====================================="
+	@python3 screenshots/create_screenshots.py
 
 # Git targets
 .PHONY: status

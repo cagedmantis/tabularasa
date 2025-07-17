@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tabularasa Screenshots Generator</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f0f0;
+        }
+        
+        .screenshot-container {
+            width: 1280px;
+            height: 800px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .screenshot-title {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        /* Copy styles from manager.css but adapted for screenshots */
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .tab-count {
+            font-size: 14px;
+            opacity: 0.9;
+            background: rgba(255,255,255,0.2);
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+        
+        .header-controls {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .header-controls .btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            cursor: pointer;
+        }
+        
+        .search-container {
+            padding: 10px 16px;
+            background: white;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+        
+        .global-actions {
+            padding: 10px 16px;
+            background: #e9ecef;
+            border-bottom: 1px solid #d1d5db;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        
+        .action-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .btn-primary { background: #007bff; color: white; border-color: #007bff; }
+        .btn-secondary { background: #6c757d; color: white; border-color: #6c757d; }
+        .btn-danger { background: #dc3545; color: white; border-color: #dc3545; }
+        .btn-small { padding: 4px 8px; font-size: 11px; }
+        
+        .tabs-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 16px;
+        }
+        
+        .tab-group {
+            margin-bottom: 16px;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            background: white;
+        }
+        
+        .tab-group-header {
+            background: #e9ecef;
+            padding: 8px 12px;
+            border-bottom: 1px solid #d1d5db;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 500;
+        }
+        
+        .tab-group-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .tab-group-title {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .tab-group-count {
+            font-size: 12px;
+            color: #374151;
+            background: #d1d5db;
+            padding: 1px 6px;
+            border-radius: 10px;
+        }
+        
+        .tab-group-actions {
+            display: flex;
+            gap: 6px;
+        }
+        
+        .tab-item {
+            padding: 8px 12px;
+            border-bottom: 1px solid #f8f9fa;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .tab-item:hover {
+            background: #f3f4f6;
+        }
+        
+        .tab-item.active {
+            background: #dbeafe;
+            border-left: 4px solid #1d4ed8;
+            color: #1e40af;
+            font-weight: 500;
+        }
+        
+        .tab-item.selected {
+            background: #fed7aa;
+            border-left: 4px solid #ea580c;
+            color: #9a3412;
+            font-weight: 500;
+        }
+        
+        .tab-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+        
+        .tab-favicon {
+            width: 16px;
+            height: 16px;
+            border-radius: 2px;
+        }
+        
+        .tab-content {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .tab-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #111827;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-shrink: 0;
+            max-width: 300px;
+        }
+        
+        .tab-separator {
+            color: #9ca3af;
+            margin: 0 6px;
+            flex-shrink: 0;
+        }
+        
+        .tab-url {
+            font-size: 12px;
+            color: #4b5563;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 400;
+            flex-shrink: 1;
+        }
+        
+        .tab-actions {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .tab-action {
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .tab-action:hover {
+            background: #f3f4f6;
+        }
+        
+        .selected-count {
+            font-size: 13px;
+            color: #374151;
+            margin-left: 8px;
+            font-weight: 500;
+        }
+        
+        .demo-highlight {
+            position: absolute;
+            border: 2px solid #ff6b6b;
+            border-radius: 4px;
+            background: rgba(255, 107, 107, 0.1);
+            z-index: 1000;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .demo-annotation {
+            position: absolute;
+            background: #ff6b6b;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 1001;
+        }
+        
+        .demo-annotation::before {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 4px solid transparent;
+            border-top-color: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <!-- Screenshot 1: Main Interface -->
+    <div class="screenshot-title">Screenshot 1: Main Tab Management Interface</div>
+    <div class="screenshot-container" id="screenshot1">
+        <div class="container">
+            <header class="header">
+                <div class="header-left">
+                    <h1>Tabularasa</h1>
+                    <span class="tab-count">24 tabs</span>
+                </div>
+                <div class="header-controls">
+                    <button class="btn active">🪟 Windows</button>
+                    <button class="btn">💾 Sessions</button>
+                    <button class="btn">🔄 Refresh</button>
+                </div>
+            </header>
+            
+            <div class="search-container">
+                <input type="text" class="search-input" placeholder="Search tabs by title or URL...">
+                <button class="btn">✕</button>
+            </div>
+            
+            <div class="global-actions">
+                <div class="action-group">
+                    <button class="btn btn-small">Select All</button>
+                    <button class="btn btn-small">Deselect All</button>
+                    <span class="selected-count">3 selected</span>
+                </div>
+                <div class="action-group">
+                    <button class="btn btn-small btn-primary">Group Selected</button>
+                    <button class="btn btn-small btn-secondary">Ungroup Selected</button>
+                    <button class="btn btn-small">Move to New Window</button>
+                </div>
+                <div class="action-group">
+                    <button class="btn btn-small btn-danger">Close Selected (3)</button>
+                    <button class="btn btn-small">Close Duplicates</button>
+                </div>
+            </div>
+            
+            <div class="tabs-container">
+                <div class="tab-group">
+                    <div class="tab-group-header">
+                        <div class="tab-group-info">
+                            <span class="tab-group-title">github.com</span>
+                            <span class="tab-group-count">5 tabs</span>
+                        </div>
+                        <div class="tab-group-actions">
+                            <button class="btn btn-small btn-secondary">Select All</button>
+                            <button class="btn btn-small btn-secondary">Unselect All</button>
+                            <button class="btn btn-small btn-danger">Close All</button>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-item active">
+                        <input type="checkbox" class="tab-checkbox">
+                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iIzI0MjkyZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNOCAwQzMuNTggMCAwIDMuNTggMCA4YzAgMy41NCAyLjI5IDYuNTMgNS40NyA3LjU5LjQuMDcuNTUtLjE3LjU1LS4zOCAwLS4xOS0uMDEtLjgyLS4wMS0xLjQ5LTIuMDEuMzctMi41My0uNDktMi42OS0uOTQtLjA5LS4yMy0uNDgtLjk0LS44Mi0xLjEzLS4yOC0uMTUtLjY4LS41Mi0uMDEtLjUzLjYzLS4wMSAxLjA4LjU4IDEuMjMuODIuNzIgMS4yMSAxLjg3Ljg3IDIuMzMuNjYuMDctLjUyLjI4LS44Ny41MS0xLjA3LTEuNzgtLjItMy42NC0uODktMy42NC0zLjk1IDAtLjg3LjMxLTEuNTkuODItMi4xNS0uMDgtLjItLjM2LTEuMDIuMDgtMi4xMiAwIDAgLjY3LS4yMSAyLjIuODIuNjQtLjE4IDEuMzItLjI3IDItLjI3LjY4IDAgMS4zNi4wOSAyIC4yNyAxLjUzLTEuMDQgMi4yLS44MiAyLjItLjgyLjQ0IDEuMSAuMTYgMS45Mi4wOCAyLjEyLjUxLjU2LjgyIDEuMjcuODIgMi4xNSAwIDMuMDctMS44NyAzLjc1LTMuNjUgMy45NS4yOS4yNS41NC43My41NCAxLjQ4IDAgMS4wNy0uMDEgMS45My0uMDEgMi4yIDAgLjIxLjE1LjQ2LjU1LjM4QTguMDEzIDguMDEzIDAgMCAwIDE2IDhjMC00LjQyLTMuNTgtOC04LTh6Ii8+Cjwvc3ZnPgo=" class="tab-favicon">
+                        <div class="tab-content">
+                            <span class="tab-title">GitHub - Microsoft/TypeScript</span>
+                            <span class="tab-separator">•</span>
+                            <span class="tab-url">github.com/Microsoft/TypeScript</span>
+                        </div>
+                        <div class="tab-actions">
+                            <button class="tab-action">📍</button>
+                            <button class="tab-action">🔊</button>
+                            <button class="tab-action">✕</button>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-item selected">
+                        <input type="checkbox" class="tab-checkbox" checked>
+                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iIzI0MjkyZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNOCAwQzMuNTggMCAwIDMuNTggMCA4YzAgMy41NCAyLjI5IDYuNTMgNS40NyA3LjU5LjQuMDcuNTUtLjE3LjU1LS4zOCAwLS4xOS0uMDEtLjgyLS4wMS0xLjQ5LTIuMDEuMzctMi41My0uNDktMi42OS0uOTQtLjA5LS4yMy0uNDgtLjk0LS44Mi0xLjEzLS4yOC0uMTUtLjY4LS41Mi0uMDEtLjUzLjYzLS4wMSAxLjA4LjU4IDEuMjMuODIuNzIgMS4yMSAxLjg3Ljg3IDIuMzMuNjYuMDctLjUyLjI4LS44Ny41MS0xLjA3LTEuNzgtLjItMy42NC0uODktMy42NC0zLjk1IDAtLjg3LjMxLTEuNTkuODItMi4xNS0uMDgtLjItLjM2LTEuMDIuMDgtMi4xMiAwIDAgLjY3LS4yMSAyLjIuODIuNjQtLjE4IDEuMzItLjI3IDItLjI3LjY4IDAgMS4zNi4wOSAyIC4yNyAxLjUzLTEuMDQgMi4yLS44MiAyLjItLjgyLjQ0IDEuMSAuMTYgMS45Mi4wOCAyLjEyLjUxLjU2LjgyIDEuMjcuODIgMi4xNSAwIDMuMDctMS44NyAzLjc1LTMuNjUgMy45NS4yOS4yNS41NC43My41NCAxLjQ4IDAgMS4wNy0uMDEgMS45My0uMDEgMi4yIDAgLjIxLjE1LjQ2LjU1LjM4QTguMDEzIDguMDEzIDAgMCAwIDE2IDhjMC00LjQyLTMuNTgtOC04LTh6Ii8+Cjwvc3ZnPgo=" class="tab-favicon">
+                        <div class="tab-content">
+                            <span class="tab-title">GitHub Issues - tabularasa</span>
+                            <span class="tab-separator">•</span>
+                            <span class="tab-url">github.com/user/tabularasa/issues</span>
+                        </div>
+                        <div class="tab-actions">
+                            <button class="tab-action">📍</button>
+                            <button class="tab-action">🔊</button>
+                            <button class="tab-action">✕</button>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-item">
+                        <input type="checkbox" class="tab-checkbox">
+                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iIzI0MjkyZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNOCAwQzMuNTggMCAwIDMuNTggMCA4YzAgMy41NCAyLjI5IDYuNTMgNS40NyA3LjU5LjQuMDcuNTUtLjE3LjU1LS4zOCAwLS4xOS0uMDEtLjgyLS4wMS0xLjQ5LTIuMDEuMzctMi41My0uNDktMi42OS0uOTQtLjA5LS4yMy0uNDgtLjk0LS44Mi0xLjEzLS4yOC0uMTUtLjY4LS41Mi0uMDEtLjUzLjYzLS4wMSAxLjA4LjU4IDEuMjMuODIuNzIgMS4yMSAxLjg3Ljg3IDIuMzMuNjYuMDctLjUyLjI4LS44Ny41MS0xLjA3LTEuNzgtLjItMy42NC0uODktMy42NC0zLjk1IDAtLjg3LjMxLTEuNTkuODItMi4xNS0uMDgtLjItLjM2LTEuMDIuMDgtMi4xMiAwIDAgLjY3LS4yMSAyLjIuODIuNjQtLjE4IDEuMzItLjI3IDItLjI3LjY4IDAgMS4zNi4wOSAyIC4yNyAxLjUzLTEuMDQgMi4yLS44MiAyLjItLjgyLjQ0IDEuMSAuMTYgMS45Mi4wOCAyLjEyLjUxLjU2LjgyIDEuMjcuODIgMi4xNSAwIDMuMDctMS44NyAzLjc1LTMuNjUgMy45NS4yOS4yNS41NC43My41NCAxLjQ4IDAgMS4wNy0uMDEgMS45My0uMDEgMi4yIDAgLjIxLjE1LjQ2LjU1LjM4QTguMDEzIDguMDEzIDAgMCAwIDE2IDhjMC00LjQyLTMuNTgtOC04LTh6Ii8+Cjwvc3ZnPgo=" class="tab-favicon">
+                        <div class="tab-content">
+                            <span class="tab-title">GitHub Docs - Chrome Extensions</span>
+                            <span class="tab-separator">•</span>
+                            <span class="tab-url">github.com/GoogleChrome/chrome-extensions-samples</span>
+                        </div>
+                        <div class="tab-actions">
+                            <button class="tab-action">📍</button>
+                            <button class="tab-action">🔊</button>
+                            <button class="tab-action">✕</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tab-group">
+                    <div class="tab-group-header">
+                        <div class="tab-group-info">
+                            <span class="tab-group-title">stackoverflow.com</span>
+                            <span class="tab-group-count">3 tabs</span>
+                        </div>
+                        <div class="tab-group-actions">
+                            <button class="btn btn-small btn-secondary">Select All</button>
+                            <button class="btn btn-small btn-secondary">Unselect All</button>
+                            <button class="btn btn-small btn-danger">Close All</button>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-item selected">
+                        <input type="checkbox" class="tab-checkbox" checked>
+                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iI0Y0ODAzRiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyLjY1OCAxNC4wNzdsLTEuNjk3LTQuMTI1SDYuMDMxbC0xLjY5NyA0LjEyNUgyLjMzOEw2LjkzMSAxLjkyM0g5LjA2OWwwIDAgMS45NzItNC4wNzhoMS45NzJ6bS0yLjE5My01LjMxNkwxMi4wNzcgMy4yMzMgMTAuNDY1IDguNzYxeiIvPgo8L3N2Zz4=" class="tab-favicon">
+                        <div class="tab-content">
+                            <span class="tab-title">TypeScript Chrome Extension</span>
+                            <span class="tab-separator">•</span>
+                            <span class="tab-url">stackoverflow.com/questions/typescript-chrome-extension</span>
+                        </div>
+                        <div class="tab-actions">
+                            <button class="tab-action">📍</button>
+                            <button class="tab-action">🔊</button>
+                            <button class="tab-action">✕</button>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-item">
+                        <input type="checkbox" class="tab-checkbox">
+                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iI0Y0ODAzRiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyLjY1OCAxNC4wNzdsLTEuNjk3LTQuMTI1SDYuMDMxbC0xLjY5NyA0LjEyNUgyLjMzOEw2LjkzMSAxLjkyM0g5LjA2OWwwIDAgMS45NzItNC4wNzhoMS45NzJ6bS0yLjE5My01LjMxNkwxMi4wNzcgMy4yMzMgMTAuNDY1IDguNzYxeiIvPgo8L3N2Zz4=" class="tab-favicon">
+                        <div class="tab-content">
+                            <span class="tab-title">Chrome tabs API documentation</span>
+                            <span class="tab-separator">•</span>
+                            <span class="tab-url">stackoverflow.com/questions/chrome-tabs-api</span>
+                        </div>
+                        <div class="tab-actions">
+                            <button class="tab-action">📍</button>
+                            <button class="tab-action">🔊</button>
+                            <button class="tab-action">✕</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tab-group">
+                    <div class="tab-group-header">
+                        <div class="tab-group-info">
+                            <span class="tab-group-title">developer.chrome.com</span>
+                            <span class="tab-group-count">4 tabs</span>
+                        </div>
+                        <div class="tab-group-actions">
+                            <button class="btn btn-small btn-secondary">Select All</button>
+                            <button class="btn btn-small btn-secondary">Unselect All</button>
+                            <button class="btn btn-small btn-danger">Close All</button>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-item selected">
+                        <input type="checkbox" class="tab-checkbox" checked>
+                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iIzQyODVGNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTggMEM2LjY4IDAgNS4zNi4yMyA0LjEyLjY3QzIuODggMS4xMSAxLjggMS44MSAxIDNzLS44MSAxLjg4LTEuMjUgMy4xMkMtLjM2IDcuMzYtLjEzIDguNjgtLjEzIDEwcy0uMjMgMi42NC0uNjcgMy44OGMtLjQ0IDEuMjQtMS4xNCAyLjMyLTIuMTYgMy4ycy0yLjA4IDEuNTItMy4zMiAxLjk2Yy0xLjI0LjQ0LTIuNTYuNjctMy44OC42N3oiLz4KPC9zdmc+" class="tab-favicon">
+                        <div class="tab-content">
+                            <span class="tab-title">Chrome Extensions - Getting Started</span>
+                            <span class="tab-separator">•</span>
+                            <span class="tab-url">developer.chrome.com/docs/extensions/get-started</span>
+                        </div>
+                        <div class="tab-actions">
+                            <button class="tab-action">📍</button>
+                            <button class="tab-action">🔊</button>
+                            <button class="tab-action">✕</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Instructions for taking screenshots
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Screenshots ready!');
+            console.log('Instructions:');
+            console.log('1. Open browser developer tools (F12)');
+            console.log('2. Set device to 1280x800 resolution');
+            console.log('3. Take screenshot of each .screenshot-container');
+            console.log('4. Save as PNG files named screenshot-1.png, screenshot-2.png, etc.');
+        });
+    </script>
+</body>
+</html>
