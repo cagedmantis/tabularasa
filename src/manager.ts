@@ -1093,5 +1093,5 @@ document.addEventListener('DOMContentLoaded', () => {
     (window as any).tabManager = new TabManager();
 });
 
-// Export for global access
-export { TabManager };
+// Make TabManager available globally
+(window as any).TabManager = TabManager;
