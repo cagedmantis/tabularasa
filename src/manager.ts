@@ -897,6 +897,8 @@ class TabManager {
                 
                 if (closedCount > 0) {
                     this.showStatusMessage(`${closedCount} duplicate tabs closed`);
+                    // Refresh the tab list to update the UI
+                    await this.refreshTabs();
                 } else {
                     this.showStatusMessage('No duplicate tabs could be closed');
                 }
