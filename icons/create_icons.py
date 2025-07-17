@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Script to create simple icon files for the Tabularasa extension
-Creates SVG icons and converts them to PNG format
+Script to create notebook and fountain pen icon files for the Tabularasa extension
+Creates SVG icons with a notebook and fountain pen design and converts them to PNG format
 """
 
 import os
@@ -9,7 +9,7 @@ import subprocess
 from xml.etree import ElementTree as ET
 
 def create_svg_icon(size):
-    """Create an SVG icon with the specified size"""
+    """Create an SVG icon with a notebook and fountain pen design"""
     svg = ET.Element('svg', {
         'xmlns': 'http://www.w3.org/2000/svg',
         'width': str(size),
@@ -17,79 +17,151 @@ def create_svg_icon(size):
         'viewBox': '0 0 24 24',
         'fill': 'none',
         'stroke': 'currentColor',
-        'stroke-width': '2',
+        'stroke-width': '1.5',
         'stroke-linecap': 'round',
         'stroke-linejoin': 'round'
     })
     
-    # Create a simple tab icon design
-    # Background rectangle
-    bg_rect = ET.SubElement(svg, 'rect', {
-        'x': '2',
+    # Notebook shadow for depth
+    shadow = ET.SubElement(svg, 'rect', {
+        'x': '3.5',
+        'y': '6.5',
+        'width': '16',
+        'height': '13',
+        'rx': '1',
+        'fill': '#d1d5db',
+        'stroke': 'none'
+    })
+    
+    # Notebook cover
+    notebook = ET.SubElement(svg, 'rect', {
+        'x': '3',
         'y': '6',
-        'width': '20',
-        'height': '12',
-        'rx': '2',
-        'fill': '#667eea',
-        'stroke': '#667eea'
-    })
-    
-    # Tab representations
-    tab1 = ET.SubElement(svg, 'rect', {
-        'x': '4',
-        'y': '8',
-        'width': '6',
-        'height': '8',
+        'width': '16',
+        'height': '13',
         'rx': '1',
-        'fill': 'white',
-        'stroke': 'white'
-    })
-    
-    tab2 = ET.SubElement(svg, 'rect', {
-        'x': '12',
-        'y': '8',
-        'width': '6',
-        'height': '8',
-        'rx': '1',
-        'fill': 'white',
-        'stroke': 'white'
-    })
-    
-    # Small lines to represent content
-    line1 = ET.SubElement(svg, 'line', {
-        'x1': '5',
-        'y1': '10',
-        'x2': '9',
-        'y2': '10',
-        'stroke': '#667eea',
+        'fill': '#8b5cf6',
+        'stroke': '#7c3aed',
         'stroke-width': '1'
+    })
+    
+    # Notebook spiral binding
+    spiral1 = ET.SubElement(svg, 'circle', {
+        'cx': '6',
+        'cy': '8',
+        'r': '0.8',
+        'fill': 'none',
+        'stroke': '#6d28d9',
+        'stroke-width': '1'
+    })
+    
+    spiral2 = ET.SubElement(svg, 'circle', {
+        'cx': '6',
+        'cy': '10.5',
+        'r': '0.8',
+        'fill': 'none',
+        'stroke': '#6d28d9',
+        'stroke-width': '1'
+    })
+    
+    spiral3 = ET.SubElement(svg, 'circle', {
+        'cx': '6',
+        'cy': '13',
+        'r': '0.8',
+        'fill': 'none',
+        'stroke': '#6d28d9',
+        'stroke-width': '1'
+    })
+    
+    spiral4 = ET.SubElement(svg, 'circle', {
+        'cx': '6',
+        'cy': '15.5',
+        'r': '0.8',
+        'fill': 'none',
+        'stroke': '#6d28d9',
+        'stroke-width': '1'
+    })
+    
+    # Notebook lines to represent pages
+    line1 = ET.SubElement(svg, 'line', {
+        'x1': '9',
+        'y1': '9',
+        'x2': '16',
+        'y2': '9',
+        'stroke': '#a855f7',
+        'stroke-width': '0.5'
     })
     
     line2 = ET.SubElement(svg, 'line', {
-        'x1': '5',
-        'y1': '12',
-        'x2': '8',
-        'y2': '12',
-        'stroke': '#667eea',
-        'stroke-width': '1'
+        'x1': '9',
+        'y1': '11',
+        'x2': '15',
+        'y2': '11',
+        'stroke': '#a855f7',
+        'stroke-width': '0.5'
     })
     
     line3 = ET.SubElement(svg, 'line', {
-        'x1': '13',
-        'y1': '10',
-        'x2': '17',
-        'y2': '10',
-        'stroke': '#667eea',
-        'stroke-width': '1'
+        'x1': '9',
+        'y1': '13',
+        'x2': '16',
+        'y2': '13',
+        'stroke': '#a855f7',
+        'stroke-width': '0.5'
     })
     
     line4 = ET.SubElement(svg, 'line', {
-        'x1': '13',
-        'y1': '12',
-        'x2': '16',
-        'y2': '12',
-        'stroke': '#667eea',
-        'stroke-width': '1'
+        'x1': '9',
+        'y1': '15',
+        'x2': '14',
+        'y2': '15',
+        'stroke': '#a855f7',
+        'stroke-width': '0.5'
+    })
+    
+    # Fountain pen cap
+    pen_cap = ET.SubElement(svg, 'ellipse', {
+        'cx': '10',
+        'cy': '4',
+        'rx': '0.8',
+        'ry': '2.5',
+        'fill': '#1f2937',
+        'stroke': '#111827',
+        'stroke-width': '0.5',
+        'transform': 'rotate(25 10 4)'
+    })
+    
+    # Fountain pen body
+    pen_body = ET.SubElement(svg, 'ellipse', {
+        'cx': '14',
+        'cy': '7',
+        'rx': '0.7',
+        'ry': '4',
+        'fill': '#374151',
+        'stroke': '#1f2937',
+        'stroke-width': '0.5',
+        'transform': 'rotate(25 14 7)'
+    })
+    
+    # Fountain pen tip
+    pen_tip = ET.SubElement(svg, 'ellipse', {
+        'cx': '17',
+        'cy': '9.5',
+        'rx': '0.4',
+        'ry': '1.2',
+        'fill': '#fbbf24',
+        'stroke': '#f59e0b',
+        'stroke-width': '0.5',
+        'transform': 'rotate(25 17 9.5)'
+    })
+    
+    # Pen clip
+    pen_clip = ET.SubElement(svg, 'path', {
+        'd': 'M 8.5 2.5 Q 8 2 8 3 Q 8 4 8.5 3.5',
+        'fill': 'none',
+        'stroke': '#6b7280',
+        'stroke-width': '0.8',
+        'stroke-linecap': 'round'
     })
     
     return ET.tostring(svg, encoding='unicode')
