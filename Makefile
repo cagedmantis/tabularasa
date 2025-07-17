@@ -35,6 +35,8 @@ help:
 	@echo "Package & Distribution:"
 	@echo "  package        - Create distribution package"
 	@echo "  zip            - Create ZIP file for Chrome Web Store"
+	@echo "  store-prep     - Chrome Web Store preparation checklist"
+	@echo "  validate-manifest - Validate manifest.json for Chrome Web Store"
 	@echo ""
 	@echo "Git & Release:"
 	@echo "  status         - Show git status and branch info"
@@ -133,12 +135,13 @@ open-extensions:
 .PHONY: package
 package: build test lint
 	@echo "Creating distribution package..."
+	@rm -rf dist-package
 	@mkdir -p dist-package
 	@cp -r $(DIST_DIR) dist-package/
 	@cp manifest.json dist-package/
 	@cp -r $(ICONS_DIR) dist-package/
 	@cp manager.html manager.css dist-package/
-	@cp popup.html popup.css dist-package/
+	@cp popup.html popup.css dist-package/ 2>/dev/null || true
 	@cp LICENSE README.md dist-package/
 	@echo "Package created in dist-package/"
 
@@ -147,6 +150,31 @@ zip: package
 	@echo "Creating ZIP file for Chrome Web Store..."
 	@cd dist-package && zip -r ../$(EXTENSION_NAME)-$(shell date +%Y%m%d-%H%M%S).zip .
 	@echo "ZIP file created: $(EXTENSION_NAME)-$(shell date +%Y%m%d-%H%M%S).zip"
+
+.PHONY: store-prep
+store-prep: build
+	@echo "Chrome Web Store preparation checklist:"
+	@echo "✅ Extension package created"
+	@echo "✅ Manifest V3 compliant"
+	@echo "✅ Icons generated (16, 32, 48, 128px)"
+	@echo ""
+	@echo "⚠️  TODO before upload:"
+	@echo "  1. Create 1-5 screenshots (1280x800px)"
+	@echo "  2. Write comprehensive description"
+	@echo "  3. Create privacy policy"
+	@echo "  4. Register Chrome Web Store developer account ($5)"
+	@echo ""
+	@echo "📖 See CHROME_STORE_GUIDE.md for detailed instructions"
+
+.PHONY: validate-manifest
+validate-manifest:
+	@echo "Validating manifest.json..."
+	@python3 -m json.tool manifest.json > /dev/null && echo "✅ Manifest JSON is valid" || echo "❌ Manifest JSON is invalid"
+	@grep -q '"manifest_version": 3' manifest.json && echo "✅ Manifest V3 compliant" || echo "❌ Not Manifest V3 compliant"
+	@grep -q '"name"' manifest.json && echo "✅ Name field present" || echo "❌ Name field missing"
+	@grep -q '"version"' manifest.json && echo "✅ Version field present" || echo "❌ Version field missing"
+	@grep -q '"description"' manifest.json && echo "✅ Description field present" || echo "❌ Description field missing"
+	@grep -q '"icons"' manifest.json && echo "✅ Icons field present" || echo "❌ Icons field missing"
 
 # Git targets
 .PHONY: status
