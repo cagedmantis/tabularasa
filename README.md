@@ -87,6 +87,69 @@ To test the "Tabularasa" Chrome extension locally:
 
 9. **Reloading Changes**: If you make any changes to the extension's code, go back to `chrome://extensions` and click the "reload" icon (a circular arrow) next to the "Tabularasa" extension to apply the changes.
 
+## Development
+
+### Using the Makefile
+
+The project includes a comprehensive Makefile for common development tasks:
+
+```bash
+# Show all available commands
+make help
+
+# Build the extension
+make build
+
+# Run tests
+make test
+
+# Generate icons
+make icons
+
+# Load extension in Chrome (requires Chrome to be closed first)
+make chrome-dev
+
+# Launch Chrome with clean profile and extension
+make chrome-clean
+
+# Create distribution package
+make package
+
+# Run full test suite with linting and coverage
+make full-test
+```
+
+### Command Line Extension Loading
+
+You can load the unpacked extension via command line using:
+
+```bash
+# Method 1: Using the Makefile (recommended)
+make chrome-dev
+
+# Method 2: Direct Chrome command (macOS)
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --load-extension=/path/to/tabularasa
+
+# Method 3: Direct Chrome command (Linux)
+google-chrome --load-extension=/path/to/tabularasa
+```
+
+**Important Notes:**
+- Chrome must be completely closed for command-line loading to work
+- The `--load-extension` flag only works in development mode
+- Extensions loaded this way are temporary and removed when Chrome restarts
+- For permanent development, use the manual loading method described below
+
+### Manual Extension Loading
+
+For regular development work, manually load the extension:
+
+1. Build the extension: `make build`
+2. Open Chrome and navigate to `chrome://extensions/`
+3. Enable "Developer mode" (toggle in top-right corner)
+4. Click "Load unpacked" and select the project directory
+5. The extension will appear in your Chrome toolbar
+
 ## Usage Guide
 
 ### Basic Navigation
