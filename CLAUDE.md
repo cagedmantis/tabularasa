@@ -16,12 +16,12 @@ This is a Chrome Tab Manager Extension called "tabularasa" built with TypeScript
 ## Project Structure
 
 - `src/` - TypeScript source files
-  - `background.ts` - Service worker for extension lifecycle
+  - `background.ts` - Service worker for extension lifecycle and window management
   - `content.ts` - Content script injected into web pages
-  - `popup.ts` - Popup interface logic
+  - `manager.ts` - Tab management window logic
 - `dist/` - Compiled JavaScript output
 - `manifest.json` - Chrome extension configuration
-- `popup.html` - Extension popup UI
+- `manager.html` - Tab management window UI
 - `tsconfig.json` - TypeScript configuration
 
 ## Chrome Extension Setup
@@ -35,6 +35,13 @@ This is a Chrome Tab Manager Extension called "tabularasa" built with TypeScript
 
 - Uses Manifest V3 format
 - TypeScript compiled to ES2020 modules
-- Popup interface lists all open tabs with click-to-switch functionality
-- Background service worker handles tab lifecycle events
+- Tab management opens in a dedicated window (900x600px)
+- Features include:
+  - View all tabs grouped by window
+  - Search/filter tabs
+  - Click to switch to any tab
+  - Close individual tabs or selected tabs
+  - Close duplicate tabs automatically
+  - Multi-select tabs with Ctrl/Cmd+click
+- Background service worker handles extension action clicks and window management
 - Content script available on all pages for future tab management features

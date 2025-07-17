@@ -8,8 +8,7 @@
     "storage"
   ],
   "action": {
-    "default_popup": "popup.html",
-    "default_title": "Tabularasa"
+    "default_title": "Open Tabularasa"
   },
   "background": {
     "service_worker": "background.js"
