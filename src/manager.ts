@@ -571,7 +571,7 @@ class TabManager {
 
     private renderSessions(): void {
         const sessionsList = document.getElementById('sessions-list');
-        if (!sessionsList) return;
+        if (!sessionsList) {return;}
         
         if (this.sessions.length === 0) {
             sessionsList.innerHTML = `
@@ -633,7 +633,7 @@ class TabManager {
     }
 
     private handleFilterChange(): void {
-        this.filterType = this.elements.filterType.value as any;
+        this.filterType = this.elements.filterType.value as 'all' | 'active' | 'pinned' | 'audible' | 'grouped';
         this.render();
     }
 
@@ -693,7 +693,7 @@ class TabManager {
         };
 
         Object.values(buttons).forEach(btn => {
-            if (btn) btn.disabled = selectedCount === 0;
+            if (btn) {btn.disabled = selectedCount === 0;}
         });
 
         if (buttons.closeSelected) {
@@ -738,7 +738,7 @@ class TabManager {
     }
 
     private async closeSelectedTabs(): Promise<void> {
-        if (this.selectedTabs.size === 0) return;
+        if (this.selectedTabs.size === 0) {return;}
 
         try {
             const tabIds = Array.from(this.selectedTabs);
@@ -840,7 +840,7 @@ class TabManager {
     }
 
     private async moveToNewWindow(): Promise<void> {
-        if (this.selectedTabs.size === 0) return;
+        if (this.selectedTabs.size === 0) {return;}
 
         try {
             const tabIds = Array.from(this.selectedTabs);
@@ -883,8 +883,23 @@ class TabManager {
             });
 
             if (tabsToClose.length > 0) {
-                await chrome.tabs.remove(tabsToClose);
-                this.showStatusMessage(`${tabsToClose.length} duplicate tabs closed`);
+                // Close tabs individually to handle cases where some tabs may already be closed
+                let closedCount = 0;
+                for (const tabId of tabsToClose) {
+                    try {
+                        await chrome.tabs.remove(tabId);
+                        closedCount++;
+                    } catch (error) {
+                        // Tab may already be closed, continue with others
+                        console.warn(`Tab ${tabId} could not be closed (may already be closed):`, error);
+                    }
+                }
+                
+                if (closedCount > 0) {
+                    this.showStatusMessage(`${closedCount} duplicate tabs closed`);
+                } else {
+                    this.showStatusMessage('No duplicate tabs could be closed');
+                }
             } else {
                 this.showStatusMessage('No duplicate tabs found');
             }
@@ -949,7 +964,7 @@ class TabManager {
     }
 
     private async ungroupSelectedTabs(): Promise<void> {
-        if (this.selectedTabs.size === 0) return;
+        if (this.selectedTabs.size === 0) {return;}
 
         try {
             const tabIds = Array.from(this.selectedTabs);
@@ -1079,11 +1094,11 @@ class TabManager {
     async openSession(sessionId: string): Promise<void> {
         try {
             const session = this.sessions.find(s => s.id === sessionId);
-            if (!session) return;
+            if (!session) {return;}
 
             for (const windowData of session.windows) {
                 const tabs = windowData.tabs.filter(tab => tab.url && !tab.url.startsWith('chrome://'));
-                if (tabs.length === 0) continue;
+                if (tabs.length === 0) {continue;}
 
                 const newWindow = await chrome.windows.create({ 
                     url: tabs[0].url,
@@ -1147,7 +1162,7 @@ class TabManager {
     async deleteSession(sessionId: string): Promise<void> {
         try {
             const sessionIndex = this.sessions.findIndex(s => s.id === sessionId);
-            if (sessionIndex === -1) return;
+            if (sessionIndex === -1) {return;}
 
             const session = this.sessions[sessionIndex];
             this.sessions.splice(sessionIndex, 1);
@@ -1243,8 +1258,8 @@ class TabManager {
 
 // Initialize the tab manager when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    (window as any).tabManager = new TabManager();
+    (window as unknown as { tabManager: TabManager }).tabManager = new TabManager();
 });
 
 // Make TabManager available globally
-(window as any).TabManager = TabManager;
+(window as unknown as { TabManager: typeof TabManager }).TabManager = TabManager;

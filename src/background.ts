@@ -4,10 +4,10 @@
  */
 
 // Track manager tabs for real-time updates
-let managerTabIds: Set<number> = new Set();
+const managerTabIds: Set<number> = new Set();
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('Tabularasa extension installed');
+  console.warn('Tabularasa extension installed');
   
   // Pin extension icon to toolbar by default
   chrome.action.setPopup({ popup: '' }); // Ensure no popup is set
@@ -159,7 +159,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'DELETE_SESSION') {
     chrome.storage.local.get(['sessions'], (result) => {
       const sessions = result.sessions || [];
-      const filteredSessions = sessions.filter((s: any) => s.id !== request.sessionId);
+      const filteredSessions = sessions.filter((s: { id: string }) => s.id !== request.sessionId);
       chrome.storage.local.set({ sessions: filteredSessions }, () => {
         sendResponse({ success: true });
       });

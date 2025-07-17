@@ -26,6 +26,7 @@ help:
 	@echo "  test-coverage  - Run tests with coverage report"
 	@echo "  lint           - Run ESLint on source files"
 	@echo "  lint-fix       - Fix ESLint issues automatically"
+	@echo "  verify         - Run build, lint, and test (recommended before commits)"
 	@echo ""
 	@echo "Chrome Development:"
 	@echo "  chrome-dev     - Launch Chrome with extension loaded (requires Chrome to be closed)"
@@ -215,16 +216,20 @@ check-deps:
 
 # Development workflow targets
 .PHONY: dev
-dev: build chrome-dev
+dev: build lint test chrome-dev
 
 .PHONY: dev-clean
-dev-clean: clean build chrome-clean
+dev-clean: clean build lint test chrome-clean
 
 .PHONY: full-test
 full-test: lint test test-coverage
 
 .PHONY: release-prep
 release-prep: clean install build full-test package
+
+.PHONY: verify
+verify: build lint test
+	@echo "✅ All checks passed - code is ready!"
 
 # Utility targets
 .PHONY: check-tools

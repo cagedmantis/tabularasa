@@ -127,19 +127,25 @@ global.URL = jest.fn((url) => {
         throw new Error('Invalid URL');
     }
     
-    // Simple URL parsing mock
-    const match = url.match(/^(https?:\/\/)?(([^\/]+)(\/.*)?)?$/);
+    // More realistic URL validation
+    const validUrlPattern = /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/i;
+    if (!validUrlPattern.test(url)) {
+        throw new Error('Invalid URL');
+    }
+    
+    // Simple URL parsing mock for valid URLs
+    const match = url.match(/^(https?|ftp):\/\/([^\/]+)(\/.*)?$/);
     if (!match) {
         throw new Error('Invalid URL');
     }
     
-    const protocol = match[1] || 'https://';
-    const hostname = match[3] || '';
-    const pathname = match[4] || '/';
+    const protocol = match[1] + ':';
+    const hostname = match[2];
+    const pathname = match[3] || '/';
     
     return {
         href: url,
-        protocol: protocol.replace('://', ':'),
+        protocol: protocol,
         hostname: hostname,
         pathname: pathname,
         toString: () => url

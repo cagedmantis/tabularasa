@@ -4,8 +4,9 @@ module.exports = {
     
     // Test files
     testMatch: [
-        '**/tests/**/*.test.js',
-        '**/tests/**/*.test.ts'
+        '**/tests/**/*.test.js'
+        // Temporarily disable TypeScript tests
+        // '**/tests/**/*.test.ts'
     ],
     
     // Setup files

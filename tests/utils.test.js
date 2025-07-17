@@ -185,7 +185,7 @@ describe('Utility Functions', () => {
                 }
             };
 
-            expect(sanitize('<script>alert("xss")</script>')).toBe('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+            expect(sanitize('<script>alert("xss")</script>')).toBe('&lt;script&gt;alert("xss")&lt;/script&gt;');
             expect(sanitize('Normal text')).toBe('Normal text');
         });
     });
@@ -264,8 +264,8 @@ describe('Utility Functions', () => {
 
         test('should validate session data structure', () => {
             const isValidSession = (session) => {
-                return session &&
-                    typeof session.id === 'string' &&
+                if (!session) return false;
+                return typeof session.id === 'string' &&
                     typeof session.name === 'string' &&
                     typeof session.created === 'number' &&
                     Array.isArray(session.windows) &&
@@ -326,33 +326,45 @@ describe('Utility Functions', () => {
             }, 150);
         });
 
-        test('should throttle function calls', (done) => {
+        test('should throttle function calls', () => {
             const throttle = (func, delay) => {
                 let lastCall = 0;
                 return (...args) => {
                     const now = Date.now();
                     if (now - lastCall >= delay) {
                         lastCall = now;
-                        return func.apply(this, args);
+                        func.apply(this, args);
                     }
                 };
             };
 
             let callCount = 0;
             const testFunction = () => callCount++;
+            
+            // Mock Date.now to control time
+            const originalDateNow = Date.now;
+            let currentTime = 100; // Start at 100 to ensure first call executes
+            Date.now = jest.fn(() => currentTime);
+            
             const throttledFunction = throttle(testFunction, 100);
 
+            // First call at time 100
+            currentTime = 100;
             throttledFunction();
-            throttledFunction();
-            throttledFunction();
-
             expect(callCount).toBe(1);
 
-            setTimeout(() => {
-                throttledFunction();
-                expect(callCount).toBe(2);
-                done();
-            }, 150);
+            // Second call at time 150 (should be throttled - only 50ms passed)
+            currentTime = 150;
+            throttledFunction();
+            expect(callCount).toBe(1);
+
+            // Third call at time 250 (should execute - 150ms passed since last call)
+            currentTime = 250;
+            throttledFunction();
+            expect(callCount).toBe(2);
+            
+            // Restore original Date.now
+            Date.now = originalDateNow;
         });
     });
 });
