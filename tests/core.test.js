@@ -1,5 +1,5 @@
 /**
- * Core functionality tests for Tabula Rasa
+ * Core functionality tests for Tabularasa
  */
 
 describe('Core Functionality', () => {

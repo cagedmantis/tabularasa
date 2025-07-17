@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to create simple icon files for the Tabula Rasa extension
+Script to create simple icon files for the Tabularasa extension
 Creates SVG icons and converts them to PNG format
 """
 

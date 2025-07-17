@@ -1,5 +1,5 @@
 /**
- * Tabula Rasa - Manager Window
+ * Tabularasa - Manager Window
  * TypeScript implementation with tab grouping functionality
  */
 

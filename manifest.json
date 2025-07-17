@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Tabula Rasa",
+  "name": "Tabularasa",
   "version": "1.0.0",
   "description": "An advanced Chrome Tab and Window Manager",
   "permissions": [
@@ -10,7 +10,7 @@
     "tabGroups"
   ],
   "action": {
-    "default_title": "Open Tabula Rasa"
+    "default_title": "Open Tabularasa"
   },
   "background": {
     "service_worker": "dist/background.js"

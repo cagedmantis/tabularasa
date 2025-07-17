@@ -1,12 +1,12 @@
 /**
- * Tabula Rasa - Background Script
+ * Tabularasa - Background Script
  * Handles extension lifecycle, window management, and session management
  */
 
 let managerWindowId: number | null = null;
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('Tabula Rasa extension installed');
+  console.log('Tabularasa extension installed');
   
   // Initialize storage structure
   chrome.storage.local.get(['sessions'], (result) => {

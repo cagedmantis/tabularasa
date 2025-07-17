@@ -1,10 +1,10 @@
 /**
- * Tabula Rasa - Background Script
+ * Tabularasa - Background Script
  * Handles extension lifecycle and session management
  */
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('Tabula Rasa extension installed');
+  console.log('Tabularasa extension installed');
   
   // Initialize storage structure
   chrome.storage.local.get(['sessions'], (result) => {

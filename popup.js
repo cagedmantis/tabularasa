@@ -1,5 +1,5 @@
 /**
- * Tabula Rasa - Chrome Tab Manager
+ * Tabularasa - Chrome Tab Manager
  * Main popup functionality
  */
 

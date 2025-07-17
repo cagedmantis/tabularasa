@@ -1,5 +1,5 @@
 /**
- * Jest setup file for Tabula Rasa tests
+ * Jest setup file for Tabularasa tests
  * Sets up global mocks and utilities for testing
  */
 

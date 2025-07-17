@@ -1,6 +1,6 @@
-# Tabula Rasa - An Advanced Chrome Tab and Window Manager
+# Tabularasa - An Advanced Chrome Tab and Window Manager
 
-Tabula Rasa is a powerful Chrome extension that provides comprehensive tab and window management capabilities. It offers an intuitive interface for organizing, searching, and managing your browsing sessions with advanced features like session saving, duplicate detection, and multi-window operations.
+Tabularasa is a powerful Chrome extension that provides comprehensive tab and window management capabilities. It offers an intuitive interface for organizing, searching, and managing your browsing sessions with advanced features like session saving, duplicate detection, and multi-window operations.
 
 ## Features
 
@@ -53,7 +53,7 @@ Tabula Rasa is a powerful Chrome extension that provides comprehensive tab and w
 
 ## Installation Guide (Local Testing)
 
-To test the "Tabula Rasa" Chrome extension locally:
+To test the "Tabularasa" Chrome extension locally:
 
 1. **Download/Clone**: Download or clone the entire project directory to your local machine.
 
@@ -79,18 +79,18 @@ To test the "Tabula Rasa" Chrome extension locally:
    - Browse to the directory where you saved the extension's files (the main folder containing `manifest.json`, `popup.html`, etc.) and select it
 
 7. **Verify Installation**:
-   - The "Tabula Rasa" extension should now appear in your list of installed extensions
-   - A "Tabula Rasa" icon should appear in your Chrome toolbar
+   - The "Tabularasa" extension should now appear in your list of installed extensions
+   - A "Tabularasa" icon should appear in your Chrome toolbar
 
 8. **Interact**:
-   - Click the "Tabula Rasa" icon to open the tab manager popup and begin testing its features
+   - Click the "Tabularasa" icon to open the tab manager popup and begin testing its features
 
-9. **Reloading Changes**: If you make any changes to the extension's code, go back to `chrome://extensions` and click the "reload" icon (a circular arrow) next to the "Tabula Rasa" extension to apply the changes.
+9. **Reloading Changes**: If you make any changes to the extension's code, go back to `chrome://extensions` and click the "reload" icon (a circular arrow) next to the "Tabularasa" extension to apply the changes.
 
 ## Usage Guide
 
 ### Basic Navigation
-1. **Open Extension**: Click the Tabula Rasa icon in Chrome toolbar
+1. **Open Extension**: Click the Tabularasa icon in Chrome toolbar
 2. **Search Tabs**: Type in the search box to filter tabs by title or URL
 3. **Switch Views**: Toggle between "Windows" and "Domains" grouping
 4. **Switch to Tab**: Click any tab title to navigate to it

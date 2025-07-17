@@ -2,7 +2,7 @@
 
 ## Original Prompt
 
-The original prompt requested the creation of a robust Chrome extension named "Tabula Rasa" with comprehensive tab and window management capabilities. The key requirements included:
+The original prompt requested the creation of a robust Chrome extension named "Tabularasa" with comprehensive tab and window management capabilities. The key requirements included:
 
 ### Core Requirements
 - Browser action popup interface (not window-based)
