@@ -3,20 +3,29 @@
   "version": "1.0.0",
   "description": "An advanced Chrome Tab and Window Manager",
   "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
     "test": "jest --config=tests/jest.config.js",
     "test:watch": "jest --config=tests/jest.config.js --watch",
     "test:coverage": "jest --config=tests/jest.config.js --coverage",
-    "build": "echo 'No build step required - extension uses vanilla JS'",
-    "lint": "eslint popup.js background.js",
-    "clean": "rm -rf coverage dist"
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "clean": "rm -rf coverage dist",
+    "dev": "npm run build:watch"
   },
   "devDependencies": {
     "@babel/core": "^7.22.0",
     "@babel/preset-env": "^7.22.0",
+    "@types/chrome": "^0.0.268",
+    "@types/jest": "^29.5.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
     "babel-jest": "^29.5.0",
     "eslint": "^8.42.0",
     "jest": "^29.5.0",
-    "jest-environment-jsdom": "^29.5.0"
+    "jest-environment-jsdom": "^29.5.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.0"
   },
   "babel": {
     "presets": ["@babel/preset-env"]
@@ -27,20 +36,32 @@
       "es6": true,
       "webextensions": true
     },
-    "extends": "eslint:recommended",
+    "extends": [
+      "eslint:recommended",
+      "@typescript-eslint/recommended"
+    ],
+    "parser": "@typescript-eslint/parser",
     "parserOptions": {
       "ecmaVersion": 2020,
       "sourceType": "module"
     },
+    "plugins": [
+      "@typescript-eslint"
+    ],
     "globals": {
       "chrome": "readonly"
+    },
+    "rules": {
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-unused-vars": "warn"
     }
   },
   "keywords": [
     "chrome-extension",
     "tab-manager",
     "window-manager",
-    "productivity"
+    "productivity",
+    "typescript"
   ],
   "author": "Tabula Rasa Extension",
   "license": "MIT",

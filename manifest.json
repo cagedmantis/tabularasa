@@ -6,14 +6,14 @@
   "permissions": [
     "tabs",
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabGroups"
   ],
   "action": {
-    "default_popup": "popup.html",
-    "default_title": "Tabula Rasa"
+    "default_title": "Open Tabula Rasa"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "dist/background.js"
   },
   "icons": {
     "16": "icons/icon-16.svg",

@@ -4,7 +4,8 @@ module.exports = {
     
     // Test files
     testMatch: [
-        '**/tests/**/*.test.js'
+        '**/tests/**/*.test.js',
+        '**/tests/**/*.test.ts'
     ],
     
     // Setup files
@@ -15,18 +16,20 @@ module.exports = {
     coverageDirectory: 'coverage',
     coverageReporters: ['text', 'lcov', 'html'],
     collectCoverageFrom: [
-        '../popup.js',
+        '../src/**/*.ts',
+        '../dist/**/*.js',
         '!**/node_modules/**',
         '!**/tests/**',
         '!**/coverage/**'
     ],
     
     // Module paths
-    moduleFileExtensions: ['js', 'json'],
+    moduleFileExtensions: ['js', 'json', 'ts'],
     
     // Transform
     transform: {
-        '^.+\\.js$': 'babel-jest'
+        '^.+\\.js$': 'babel-jest',
+        '^.+\\.ts$': 'ts-jest'
     },
     
     // Ignore patterns
@@ -38,9 +41,15 @@ module.exports = {
     
     // Globals
     globals: {
-        'chrome': {}
+        'chrome': {},
+        'ts-jest': {
+            useESM: true
+        }
     },
     
     // Verbose output
-    verbose: true
+    verbose: true,
+    
+    // Preset
+    preset: 'ts-jest'
 };
