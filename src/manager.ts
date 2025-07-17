@@ -382,6 +382,13 @@ class TabManager {
         const actions = document.createElement('div');
         actions.className = 'tab-group-actions';
         
+        // Select All button for domain groupings
+        const selectAllBtn = document.createElement('button');
+        selectAllBtn.className = 'btn btn-small btn-secondary';
+        selectAllBtn.textContent = 'Select All';
+        selectAllBtn.addEventListener('click', () => this.selectAllTabsInGroup(tabs));
+        actions.appendChild(selectAllBtn);
+        
         if (tabGroup) {
             const collapseBtn = document.createElement('button');
             collapseBtn.className = 'btn btn-small btn-secondary';
@@ -399,7 +406,7 @@ class TabManager {
         const closeAllBtn = document.createElement('button');
         closeAllBtn.className = 'btn btn-small btn-danger';
         closeAllBtn.textContent = 'Close All';
-        closeAllBtn.addEventListener('click', () => this.closeTabGroup(groupKey, tabs));
+        closeAllBtn.addEventListener('click', () => this.closeTabGroupOptimized(groupKey, tabs));
         actions.appendChild(closeAllBtn);
         
         header.appendChild(actions);
@@ -684,6 +691,41 @@ class TabManager {
             console.error('Error closing tab group:', error);
             this.showStatusMessage('Error closing tab group', 'error');
         }
+    }
+
+    private async closeTabGroupOptimized(groupKey: string, tabs: TabInfo[]): Promise<void> {
+        try {
+            if (tabs.length > 0) {
+                // Remove tabs from selection to avoid re-rendering issues
+                tabs.forEach(tab => this.selectedTabs.delete(tab.id));
+                
+                // Close tabs in batches to improve performance
+                const batchSize = 10;
+                const tabIds = tabs.map(tab => tab.id);
+                
+                for (let i = 0; i < tabIds.length; i += batchSize) {
+                    const batch = tabIds.slice(i, i + batchSize);
+                    await chrome.tabs.remove(batch);
+                    
+                    // Small delay to prevent overwhelming the Chrome API
+                    if (i + batchSize < tabIds.length) {
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                }
+                
+                this.showStatusMessage(`${tabIds.length} tabs closed from ${groupKey}`);
+            }
+        } catch (error) {
+            console.error('Error closing tab group:', error);
+            this.showStatusMessage('Error closing tab group', 'error');
+        }
+    }
+
+    private selectAllTabsInGroup(tabs: TabInfo[]): void {
+        tabs.forEach(tab => this.selectedTabs.add(tab.id));
+        this.updateGlobalActions();
+        this.updateTabCount();
+        this.render();
     }
 
     private async toggleTabPin(tabId: number): Promise<void> {
