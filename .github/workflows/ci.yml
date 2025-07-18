@@ -75,7 +75,7 @@ jobs:
       run: make package
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: extension-package
         path: dist-package/

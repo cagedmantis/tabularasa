@@ -1,7 +1,6 @@
 # Tabularasa - An Advanced Chrome Tab and Window Manager
 
-[![CI](https://github.com/carlos/tabularasa/actions/workflows/ci.yml/badge.svg)](https://github.com/carlos/tabularasa/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/carlos/tabularasa/branch/main/graph/badge.svg)](https://codecov.io/gh/carlos/tabularasa)
+[![CI](https://github.com/cagedmantis/tabularasa/actions/workflows/ci.yml/badge.svg)](https://github.com/carlos/tabularasa/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-4285F4?logo=google-chrome&logoColor=white)](https://chrome.google.com/webstore)
 
@@ -47,7 +46,7 @@ Tabularasa is a powerful Chrome extension that provides comprehensive tab and wi
 - **Bulk Operations**: Close multiple duplicates at once with single action
 
 ### Advanced Features
-- **Keyboard Shortcuts**: 
+- **Keyboard Shortcuts**:
   - `Ctrl/Cmd + F`: Focus search
   - `Ctrl/Cmd + A`: Select all tabs
   - `Ctrl/Cmd + N`: Create new tab
@@ -62,7 +61,7 @@ To test the "Tabularasa" Chrome extension locally:
 
 1. **Download/Clone**: Download or clone the entire project directory to your local machine.
 
-2. **Install Dependencies**: 
+2. **Install Dependencies**:
    ```bash
    npm install
    ```
