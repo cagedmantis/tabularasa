@@ -3,6 +3,7 @@
 
 # Variables
 EXTENSION_NAME := tabularasa
+VERSION := $(shell python3 -c "import json; print(json.load(open('manifest.json'))['version'])")
 EXTENSION_DIR := $(PWD)
 DIST_DIR := $(EXTENSION_DIR)/dist
 ICONS_DIR := $(EXTENSION_DIR)/icons
@@ -134,24 +135,25 @@ open-extensions:
 	 echo "Chrome not found. Please manually navigate to chrome://extensions/"
 
 # Package targets
+# Only ship what the manifest references: manifest, manager UI, compiled
+# background/manager scripts, and icon PNGs. No source maps, declaration
+# files, icon-generation scripts, or unused legacy popup files.
 .PHONY: package
 package: build test lint
 	@echo "Creating distribution package..."
 	@rm -rf dist-package
-	@mkdir -p dist-package
-	@cp -r $(DIST_DIR) dist-package/
-	@cp manifest.json dist-package/
-	@cp -r $(ICONS_DIR) dist-package/
-	@cp manager.html manager.css dist-package/
-	@cp popup.html popup.css dist-package/ 2>/dev/null || true
-	@cp LICENSE README.md dist-package/
+	@mkdir -p dist-package/dist dist-package/icons
+	@cp manifest.json manager.html manager.css dist-package/
+	@cp $(DIST_DIR)/background.js $(DIST_DIR)/manager.js dist-package/dist/
+	@cp $(ICONS_DIR)/icon-16.png $(ICONS_DIR)/icon-32.png $(ICONS_DIR)/icon-48.png $(ICONS_DIR)/icon-128.png dist-package/icons/
 	@echo "Package created in dist-package/"
 
 .PHONY: zip
 zip: package
 	@echo "Creating ZIP file for Chrome Web Store..."
-	@cd dist-package && zip -r ../$(EXTENSION_NAME)-$(shell date +%Y%m%d-%H%M%S).zip .
-	@echo "ZIP file created: $(EXTENSION_NAME)-$(shell date +%Y%m%d-%H%M%S).zip"
+	@rm -f $(EXTENSION_NAME)-$(VERSION).zip
+	@cd dist-package && zip -r ../$(EXTENSION_NAME)-$(VERSION).zip .
+	@echo "ZIP file created: $(EXTENSION_NAME)-$(VERSION).zip"
 
 .PHONY: store-prep
 store-prep: build
@@ -180,9 +182,8 @@ validate-manifest:
 
 .PHONY: screenshots
 screenshots:
-	@echo "Chrome Web Store Screenshots Generator"
-	@echo "====================================="
-	@python3 screenshots/create_screenshots.py
+	@echo "Generating Chrome Web Store screenshots..."
+	@python3 screenshots/capture.py
 
 # Git targets
 .PHONY: status
