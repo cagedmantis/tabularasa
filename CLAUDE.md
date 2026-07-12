@@ -29,7 +29,6 @@ Tabularasa is a Chrome extension that provides advanced tab and window managemen
 ### Core Files
 - `src/manager.ts` - **Main TabManager class** (most important file)
 - `src/background.ts` - Background service worker
-- `src/content.ts` - Content script (minimal)
 - `manifest.json` - Chrome extension configuration (Manifest V3)
 - `manager.html` + `manager.css` - Extension UI
 
@@ -74,7 +73,7 @@ Tabularasa is a Chrome extension that provides advanced tab and window managemen
 - Privacy-first: all data stays local (no external servers)
 
 ### Key Features
-- View tabs grouped by window or domain
+- View tabs grouped by window, Chrome tab group, or domain (view toggle cycles through all three)
 - Search/filter tabs by title or URL
 - Multi-select with bulk operations
 - Session save/restore functionality
@@ -89,15 +88,16 @@ Tabularasa is a Chrome extension that provides advanced tab and window managemen
 ## Testing & Quality
 
 ### Current Test Status
-- `tests/core.test.js` ✅ - Core functionality tests (working)
-- `tests/utils.test.js` ✅ - Utility function tests (working)
-- `tests/popup.test.js` ⏸️ - Legacy tests (skipped - needs TypeScript migration)
-- `tests/manager.test.ts` ❌ - TypeScript tests (disabled - import issues)
+- `tests/manager.test.js` ✅ - Tests the real `TabManager` class (src/manager.ts) against the real manager.html DOM in jsdom
+- `tests/background.test.js` ✅ - Tests the real background service worker (src/background.ts)
+- `tests/core.test.js` ✅ - Core logic tests (self-contained reimplementations)
+- `tests/utils.test.js` ✅ - Utility logic tests (self-contained reimplementations)
+
+TypeScript sources are loaded directly in the `.test.js` files via `require('../src/…​.ts')` (transformed by ts-jest); they expose their classes on `window`, so no exports are needed.
 
 ### Running Tests
 - `make test` - Run all tests
 - `make verify` - Full quality check (recommended)
-- 37 passing tests, 16 skipped legacy tests
 
 ## Chrome Extension Setup
 
@@ -112,8 +112,8 @@ Tabularasa is a Chrome extension that provides advanced tab and window managemen
 - Example: After closing duplicates, refresh the display
 
 ### Testing
-- Focus on `core.test.js` and `utils.test.js` for now
-- TypeScript test integration needs work
+- Put behavior tests for the manager UI in `tests/manager.test.js` and for the service worker in `tests/background.test.js`
+- `tests/setup.js` provides the chrome API mocks; jsdom provides the real DOM (do not stub document/window)
 
 ### Chrome API Patterns
 - Wrap all Chrome API calls in try/catch blocks

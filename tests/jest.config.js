@@ -1,56 +1,46 @@
 module.exports = {
+    // Project root is the repository, so coverage can be collected from src/
+    rootDir: '..',
+
     // Test environment
     testEnvironment: 'jsdom',
-    
-    // Test files
+
+    // Test files (TypeScript sources are pulled in via require() from the
+    // .test.js files and transformed by ts-jest)
     testMatch: [
-        '**/tests/**/*.test.js'
-        // Temporarily disable TypeScript tests
-        // '**/tests/**/*.test.ts'
+        '<rootDir>/tests/**/*.test.js'
     ],
-    
+
     // Setup files
-    setupFilesAfterEnv: ['<rootDir>/setup.js'],
-    
+    setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+
     // Coverage
     collectCoverage: true,
-    coverageDirectory: 'coverage',
+    coverageDirectory: '<rootDir>/tests/coverage',
     coverageReporters: ['text', 'lcov', 'html'],
     collectCoverageFrom: [
-        '../src/**/*.ts',
-        '../dist/**/*.js',
-        '!**/node_modules/**',
-        '!**/tests/**',
-        '!**/coverage/**'
+        '<rootDir>/src/**/*.ts'
     ],
-    
+
     // Module paths
     moduleFileExtensions: ['js', 'json', 'ts'],
-    
+
     // Transform
     transform: {
         '^.+\\.js$': 'babel-jest',
         '^.+\\.ts$': 'ts-jest'
     },
-    
+
     // Ignore patterns
     testPathIgnorePatterns: [
         '/node_modules/',
         '/dist/',
         '/icons/'
     ],
-    
-    // Globals
-    globals: {
-        'chrome': {},
-        'ts-jest': {
-            useESM: true
-        }
-    },
-    
+
     // Verbose output
     verbose: true,
-    
+
     // Preset
     preset: 'ts-jest'
 };
