@@ -37,7 +37,6 @@ make zip
    - `dist/` folder with compiled JavaScript
    - `icons/` folder with all PNG icons
    - `manager.html` and `manager.css`
-   - `popup.html` and `popup.css` (if used)
 
 ### Package Requirements
 - **Max size**: 2GB (current extension is much smaller)

@@ -80,14 +80,14 @@ To test the "Tabularasa" Chrome extension locally:
 
 6. **Load Unpacked**:
    - Click the "Load unpacked" button that appears
-   - Browse to the directory where you saved the extension's files (the main folder containing `manifest.json`, `popup.html`, etc.) and select it
+   - Browse to the directory where you saved the extension's files (the main folder containing `manifest.json`, `manager.html`, etc.) and select it
 
 7. **Verify Installation**:
    - The "Tabularasa" extension should now appear in your list of installed extensions
    - A "Tabularasa" icon should appear in your Chrome toolbar
 
 8. **Interact**:
-   - Click the "Tabularasa" icon to open the tab manager popup and begin testing its features
+   - Click the "Tabularasa" icon to open the tab manager in a new tab and begin testing its features
 
 9. **Reloading Changes**: If you make any changes to the extension's code, go back to `chrome://extensions` and click the "reload" icon (a circular arrow) next to the "Tabularasa" extension to apply the changes.
 
@@ -307,31 +307,32 @@ history does not use the convention.
 ```
 tabularasa/
 ├── manifest.json          # Extension configuration
-├── popup.html            # Main popup interface
-├── popup.css             # Styles for popup
-├── popup.js              # Main popup logic
-├── background.js         # Background script (compiled from src/)
+├── manager.html           # Tab manager page (opens in a new tab)
+├── manager.css            # Styles for the manager page
 ├── src/
-│   ├── background.ts     # Background script source
-│   └── content.ts        # Content script source
-├── icons/                # Extension icons
-├── tests/                # Unit tests
-│   ├── popup.test.js     # Main functionality tests
-│   ├── utils.test.js     # Utility function tests
-│   ├── jest.config.js    # Jest configuration
-│   └── setup.js          # Test setup and mocks
-└── package.json          # Project configuration
+│   ├── manager.ts         # TabManager class (manager page logic)
+│   └── background.ts      # Background service worker source
+├── dist/                  # Compiled JavaScript (build output)
+├── icons/                 # Extension icons
+├── tests/                 # Unit tests
+│   ├── manager.test.js    # TabManager behavior tests
+│   ├── background.test.js # Service worker tests
+│   ├── core.test.js       # Core logic tests
+│   ├── utils.test.js      # Utility function tests
+│   ├── jest.config.js     # Jest configuration
+│   └── setup.js           # Test setup and Chrome API mocks
+└── package.json           # Project configuration
 ```
 
 ### Key Components
 
-1. **Popup Interface** (`popup.js`):
+1. **Manager Page** (`src/manager.ts`):
    - Main UI logic and event handling
    - Tab management and filtering
    - Session management interface
    - Chrome API integration
 
-2. **Background Script** (`background.js`):
+2. **Background Service Worker** (`src/background.ts`):
    - Extension lifecycle management
    - Real-time tab/window event handling
    - Session storage operations
@@ -343,7 +344,7 @@ tabularasa/
    - Data validation and error handling
 
 4. **UI Components**:
-   - Responsive popup design
+   - Full-page manager UI
    - Modal dialogs for complex operations
    - Status notifications and feedback
    - Keyboard shortcut support
@@ -358,7 +359,6 @@ tabularasa/
 
 ## Future Enhancements
 
-- **Tab Grouping**: Support for Chrome's native tab groups
 - **Export/Import**: Backup and restore session data
 - **Advanced Search**: Regular expression and boolean search operators
 - **Custom Themes**: User-configurable color themes
@@ -400,7 +400,7 @@ tabularasa/
    - Check for memory leaks in console
 
 ### Debug Mode
-Enable debug logging by opening Chrome DevTools on the extension popup and background pages.
+Enable debug logging by opening Chrome DevTools on the manager tab and the background service worker (from chrome://extensions).
 
 ## Contributing
 

@@ -39,6 +39,6 @@ module.exports = {
     'dist/**/*',
     'node_modules/**/*',
     'tests/coverage/**/*',
-    '*.js', // Ignore JS files in root (like popup.js, background.js)
+    '*.js', // Ignore JS config files in root (like .eslintrc.js)
   ],
 };
