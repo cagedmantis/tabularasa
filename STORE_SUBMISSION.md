@@ -35,7 +35,7 @@ make screenshots  # regenerates screenshots/*.png if needed
 ### Single purpose description
 
 > Tabularasa helps users organize their browser tabs and windows: viewing tabs grouped
-> by window or domain, searching them, performing bulk actions (close, group, move),
+> by window, Chrome tab group, or domain, searching them, performing bulk actions (close, group, move),
 > removing duplicates, and saving/restoring sessions. All functionality operates
 > locally in the browser.
 

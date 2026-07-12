@@ -33,6 +33,16 @@ interface TabGroupInfo {
     windowId: number;
 }
 
+// A rendered section of the tab list: one browser window, one Chrome tab
+// group, or one domain, depending on the current view.
+interface TabBucket {
+    label: string;
+    tabs: TabInfo[];
+    chromeGroup?: TabGroupInfo;
+}
+
+type ViewType = 'windows' | 'groups' | 'domains';
+
 interface SessionInfo {
     id: string;
     name: string;
@@ -61,10 +71,11 @@ class TabManager {
     private tabGroups: TabGroupInfo[] = [];
     private sessions: SessionInfo[] = [];
     private selectedTabs: Set<number> = new Set();
-    private currentView: 'windows' | 'domains' = 'windows';
+    private currentView: ViewType = 'windows';
     private searchQuery: string = '';
     private filterType: 'all' | 'active' | 'pinned' | 'audible' | 'grouped' = 'all';
     private loading: boolean = false;
+    private statusMessageTimer: ReturnType<typeof setTimeout> | null = null;
 
     // DOM elements
     private elements = {
@@ -141,6 +152,8 @@ class TabManager {
                 case 'TAB_UPDATED':
                 case 'TAB_CREATED':
                 case 'TAB_REMOVED':
+                case 'TAB_ACTIVATED':
+                case 'TAB_MOVED':
                 case 'WINDOW_REMOVED':
                 case 'GROUP_CREATED':
                 case 'GROUP_UPDATED':
@@ -206,6 +219,15 @@ class TabManager {
                     lastAccessed: tab.lastAccessed
                 }))
             }));
+
+            // Drop selections for tabs that no longer exist (closed outside
+            // the manager), otherwise bulk operations fail on stale ids.
+            const existingIds = new Set(this.tabs.map(tab => tab.id));
+            this.selectedTabs.forEach(id => {
+                if (!existingIds.has(id)) {
+                    this.selectedTabs.delete(id);
+                }
+            });
         } catch (error) {
             console.error('Error loading tabs:', error);
             throw error;
@@ -254,7 +276,6 @@ class TabManager {
 
     private renderTabs(): void {
         const filteredTabs = this.getFilteredTabs();
-        const groupedTabs = this.groupTabs(filteredTabs);
 
         this.elements.tabsContainer.innerHTML = '';
 
@@ -263,20 +284,8 @@ class TabManager {
             return;
         }
 
-        // Render ungrouped tabs first
-        if (groupedTabs.ungrouped && groupedTabs.ungrouped.length > 0) {
-            const ungroupedElement = this.createTabGroup('Ungrouped', groupedTabs.ungrouped);
-            this.elements.tabsContainer.appendChild(ungroupedElement);
-        }
-
-        // Render grouped tabs, sorted by number of entries (descending)
-        const sortedGroups = Object.entries(groupedTabs)
-            .filter(([groupKey, tabs]) => groupKey !== 'ungrouped' && tabs.length > 0)
-            .sort(([, tabsA], [, tabsB]) => tabsB.length - tabsA.length);
-            
-        sortedGroups.forEach(([groupKey, tabs]) => {
-            const groupElement = this.createTabGroup(groupKey, tabs);
-            this.elements.tabsContainer.appendChild(groupElement);
+        this.buildBuckets(filteredTabs).forEach(bucket => {
+            this.elements.tabsContainer.appendChild(this.createTabGroup(bucket));
         });
     }
 
@@ -311,45 +320,97 @@ class TabManager {
         return filtered;
     }
 
-    private groupTabs(tabs: TabInfo[]): Record<string, TabInfo[]> {
-        const groups: Record<string, TabInfo[]> = {};
+    private buildBuckets(tabs: TabInfo[]): TabBucket[] {
+        if (this.currentView === 'windows') {
+            const byWindow = new Map<number, TabInfo[]>();
+            tabs.forEach(tab => {
+                if (!byWindow.has(tab.windowId)) {
+                    byWindow.set(tab.windowId, []);
+                }
+                byWindow.get(tab.windowId)!.push(tab);
+            });
 
-        tabs.forEach(tab => {
-            let groupKey: string;
-            
-            if (this.currentView === 'windows') {
-                if (tab.groupId && tab.groupId !== -1) {
-                    const group = this.tabGroups.find(g => g.id === tab.groupId);
-                    groupKey = group ? (group.title || `Group ${group.id}`) : 'Ungrouped';
+            // Number windows by the browser's window order
+            const buckets: TabBucket[] = [];
+            const placed = new Set<number>();
+            this.windows.forEach((window, index) => {
+                const windowTabs = byWindow.get(window.id);
+                if (windowTabs) {
+                    placed.add(window.id);
+                    buckets.push({
+                        label: `Window ${index + 1}${window.focused ? ' (current)' : ''}`,
+                        tabs: windowTabs
+                    });
+                }
+            });
+            // Windows that appeared after the last refresh of this.windows
+            byWindow.forEach((windowTabs, windowId) => {
+                if (!placed.has(windowId)) {
+                    buckets.push({ label: `Window ${windowId}`, tabs: windowTabs });
+                }
+            });
+            return buckets;
+        }
+
+        if (this.currentView === 'groups') {
+            // Bucket by group id, not title, so groups that share a title
+            // stay separate.
+            const ungrouped: TabInfo[] = [];
+            const byGroup = new Map<number, TabInfo[]>();
+            tabs.forEach(tab => {
+                const group = tab.groupId && tab.groupId !== -1
+                    ? this.tabGroups.find(g => g.id === tab.groupId)
+                    : undefined;
+                if (group) {
+                    if (!byGroup.has(group.id)) {
+                        byGroup.set(group.id, []);
+                    }
+                    byGroup.get(group.id)!.push(tab);
                 } else {
-                    groupKey = 'ungrouped';
+                    ungrouped.push(tab);
                 }
-            } else {
-                // Group by domain
-                try {
-                    const url = new URL(tab.url);
-                    groupKey = url.hostname || 'Unknown';
-                } catch {
-                    groupKey = 'Unknown';
-                }
-            }
+            });
 
-            if (!groups[groupKey]) {
-                groups[groupKey] = [];
+            const buckets: TabBucket[] = [];
+            if (ungrouped.length > 0) {
+                buckets.push({ label: 'Ungrouped', tabs: ungrouped });
             }
-            groups[groupKey].push(tab);
+            Array.from(byGroup.entries())
+                .sort(([, tabsA], [, tabsB]) => tabsB.length - tabsA.length)
+                .forEach(([groupId, groupTabs]) => {
+                    const chromeGroup = this.tabGroups.find(g => g.id === groupId)!;
+                    buckets.push({
+                        label: chromeGroup.title || `Group ${chromeGroup.id}`,
+                        tabs: groupTabs,
+                        chromeGroup
+                    });
+                });
+            return buckets;
+        }
+
+        // Domain view
+        const byDomain = new Map<string, TabInfo[]>();
+        tabs.forEach(tab => {
+            let domain: string;
+            try {
+                domain = new URL(tab.url).hostname || 'Unknown';
+            } catch {
+                domain = 'Unknown';
+            }
+            if (!byDomain.has(domain)) {
+                byDomain.set(domain, []);
+            }
+            byDomain.get(domain)!.push(tab);
         });
-
-        return groups;
+        return Array.from(byDomain.entries())
+            .sort(([, tabsA], [, tabsB]) => tabsB.length - tabsA.length)
+            .map(([domain, domainTabs]) => ({ label: domain, tabs: domainTabs }));
     }
 
-    private createTabGroup(groupKey: string, tabs: TabInfo[]): HTMLElement {
+    private createTabGroup(bucket: TabBucket): HTMLElement {
+        const { label: groupKey, tabs, chromeGroup: tabGroup } = bucket;
         const groupElement = document.createElement('div');
         groupElement.className = 'tab-group';
-
-        // Check if this is a Chrome tab group
-        const isTabGroup = tabs.some(tab => tab.groupId && tab.groupId !== -1);
-        const tabGroup = isTabGroup ? this.tabGroups.find(g => g.id === tabs[0].groupId) : null;
 
         if (tabGroup) {
             groupElement.classList.add('chrome-group');
@@ -370,7 +431,9 @@ class TabManager {
         
         const title = document.createElement('span');
         title.className = 'tab-group-title';
-        title.textContent = this.escapeHtml(groupKey);
+        // textContent does not parse HTML, so the raw string is safe here;
+        // escaping first would render literal entities like "&amp;".
+        title.textContent = groupKey;
         groupInfo.appendChild(title);
         
         const count = document.createElement('span');
@@ -600,22 +663,38 @@ class TabManager {
         const tabCount = session.windows.reduce((count, window) => count + window.tabs.length, 0);
         const windowCount = session.windows.length;
 
-        sessionElement.innerHTML = `
-            <div class="session-info">
-                <div class="session-name">${this.escapeHtml(session.name)}</div>
-                <div class="session-details">
-                    ${tabCount} tabs • ${windowCount} windows • ${new Date(session.created).toLocaleDateString()}
-                </div>
-            </div>
-            <div class="session-actions">
-                <button class="btn btn-small btn-primary" onclick="tabManager.openSession('${session.id}')">
-                    Open
-                </button>
-                <button class="btn btn-small btn-danger" onclick="tabManager.deleteSession('${session.id}')">
-                    Delete
-                </button>
-            </div>
-        `;
+        // Note: inline onclick handlers are blocked by the Manifest V3 CSP,
+        // so buttons must be wired up with addEventListener.
+        const info = document.createElement('div');
+        info.className = 'session-info';
+
+        const name = document.createElement('div');
+        name.className = 'session-name';
+        name.textContent = session.name;
+        info.appendChild(name);
+
+        const details = document.createElement('div');
+        details.className = 'session-details';
+        details.textContent = `${tabCount} tabs • ${windowCount} windows • ${new Date(session.created).toLocaleDateString()}`;
+        info.appendChild(details);
+
+        const actions = document.createElement('div');
+        actions.className = 'session-actions';
+
+        const openBtn = document.createElement('button');
+        openBtn.className = 'btn btn-small btn-primary';
+        openBtn.textContent = 'Open';
+        openBtn.addEventListener('click', () => this.openSession(session.id));
+        actions.appendChild(openBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-small btn-danger';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', () => this.deleteSession(session.id));
+        actions.appendChild(deleteBtn);
+
+        sessionElement.appendChild(info);
+        sessionElement.appendChild(actions);
 
         return sessionElement;
     }
@@ -638,14 +717,19 @@ class TabManager {
     }
 
     private toggleView(): void {
-        this.currentView = this.currentView === 'windows' ? 'domains' : 'windows';
+        const order: ViewType[] = ['windows', 'groups', 'domains'];
+        this.currentView = order[(order.indexOf(this.currentView) + 1) % order.length];
         this.render();
     }
 
     private updateViewToggle(): void {
-        const icon = this.currentView === 'windows' ? '🪟' : '🌐';
-        const text = this.currentView === 'windows' ? 'Windows' : 'Domains';
-        
+        const views: Record<ViewType, { icon: string; text: string }> = {
+            windows: { icon: '🪟', text: 'Windows' },
+            groups: { icon: '📁', text: 'Groups' },
+            domains: { icon: '🌐', text: 'Domains' }
+        };
+        const { icon, text } = views[this.currentView];
+
         this.elements.viewToggle.innerHTML = `
             <span class="icon">${icon}</span>
             <span class="text">${text}</span>
@@ -753,21 +837,6 @@ class TabManager {
         }
     }
 
-    private async closeTabGroup(groupKey: string, tabs: TabInfo[]): Promise<void> {
-        try {
-            if (tabs.length > 0) {
-                const tabIds = tabs.map(tab => tab.id);
-                await chrome.tabs.remove(tabIds);
-                this.showStatusMessage(`${tabIds.length} tabs closed from ${groupKey}`);
-                // Refresh the view immediately after closing
-                await this.refreshTabs();
-            }
-        } catch (error) {
-            console.error('Error closing tab group:', error);
-            this.showStatusMessage('Error closing tab group', 'error');
-        }
-    }
-
     private async closeTabGroupOptimized(groupKey: string, tabs: TabInfo[]): Promise<void> {
         try {
             if (tabs.length > 0) {
@@ -818,6 +887,7 @@ class TabManager {
             if (tab) {
                 await chrome.tabs.update(tabId, { pinned: !tab.pinned });
                 this.showStatusMessage(`Tab ${tab.pinned ? 'unpinned' : 'pinned'}`);
+                await this.refreshTabs();
             }
         } catch (error) {
             console.error('Error toggling tab pin:', error);
@@ -832,6 +902,7 @@ class TabManager {
                 const muted = tab.mutedInfo?.muted || false;
                 await chrome.tabs.update(tabId, { muted: !muted });
                 this.showStatusMessage(`Tab ${muted ? 'unmuted' : 'muted'}`);
+                await this.refreshTabs();
             }
         } catch (error) {
             console.error('Error toggling tab mute:', error);
@@ -854,6 +925,7 @@ class TabManager {
 
             this.selectedTabs.clear();
             this.showStatusMessage(`${tabIds.length} tabs moved to new window`);
+            await this.refreshTabs();
         } catch (error) {
             console.error('Error moving tabs to new window:', error);
             this.showStatusMessage('Error moving tabs to new window', 'error');
@@ -948,17 +1020,16 @@ class TabManager {
         try {
             const tabIds = Array.from(this.selectedTabs);
             const groupId = await chrome.tabs.group({ tabIds });
-            
-            if (groupName) {
-                await chrome.tabGroups.update(groupId, { 
-                    title: groupName,
-                    color: groupColor
-                });
-            }
+
+            await chrome.tabGroups.update(groupId, {
+                title: groupName || undefined,
+                color: groupColor
+            });
 
             this.selectedTabs.clear();
             this.hideGroupModal();
             this.showStatusMessage(`Created group ${groupName || 'Untitled'} with ${tabIds.length} tabs`);
+            await this.refreshTabs();
         } catch (error) {
             console.error('Error creating tab group:', error);
             this.showStatusMessage('Error creating tab group', 'error');
@@ -973,6 +1044,7 @@ class TabManager {
             await chrome.tabs.ungroup(tabIds);
             this.selectedTabs.clear();
             this.showStatusMessage(`${tabIds.length} tabs ungrouped`);
+            await this.refreshTabs();
         } catch (error) {
             console.error('Error ungrouping tabs:', error);
             this.showStatusMessage('Error ungrouping tabs', 'error');
@@ -985,6 +1057,7 @@ class TabManager {
             const tabIds = tabsInGroup.map(tab => tab.id);
             await chrome.tabs.ungroup(tabIds);
             this.showStatusMessage(`Ungrouped ${tabIds.length} tabs`);
+            await this.refreshTabs();
         } catch (error) {
             console.error('Error ungrouping tabs:', error);
             this.showStatusMessage('Error ungrouping tabs', 'error');
@@ -997,6 +1070,7 @@ class TabManager {
             if (group) {
                 await chrome.tabGroups.update(groupId, { collapsed: !group.collapsed });
                 this.showStatusMessage(`Group ${group.collapsed ? 'expanded' : 'collapsed'}`);
+                await this.refreshTabs();
             }
         } catch (error) {
             console.error('Error toggling group collapse:', error);
@@ -1108,12 +1182,13 @@ class TabManager {
                 });
 
                 // Create tab groups first
-                const groupMap = new Map<number, number>();
+                const tabsRestoredInGroups = new Set<typeof tabs[number]>();
                 for (const groupData of windowData.groups) {
                     const tabsInGroup = tabs.filter(tab => tab.groupId === groupData.id);
                     if (tabsInGroup.length > 0) {
                         const tabIds = [];
                         for (const tab of tabsInGroup) {
+                            tabsRestoredInGroups.add(tab);
                             if (tab !== tabs[0]) { // Skip first tab as it's already created
                                 const newTab = await chrome.tabs.create({
                                     windowId: newWindow.id,
@@ -1121,25 +1196,29 @@ class TabManager {
                                     pinned: tab.pinned,
                                     active: false
                                 });
+                                if (tab.muted) {
+                                    await chrome.tabs.update(newTab.id!, { muted: true });
+                                }
                                 tabIds.push(newTab.id!);
                             } else {
                                 tabIds.push(newWindow.tabs![0].id!);
                             }
                         }
-                        
+
                         const newGroupId = await chrome.tabs.group({ tabIds });
                         await chrome.tabGroups.update(newGroupId, {
                             title: groupData.title,
                             color: groupData.color
                         });
-                        groupMap.set(groupData.id, newGroupId);
                     }
                 }
 
-                // Add remaining tabs
+                // Add remaining tabs. Ungrouped tabs have a groupId of -1 (or
+                // undefined), so restore every tab that wasn't part of a group
+                // recreated above.
                 for (let i = 1; i < tabs.length; i++) {
                     const tab = tabs[i];
-                    if (!tab.groupId) {
+                    if (!tabsRestoredInGroups.has(tab)) {
                         const newTab = await chrome.tabs.create({
                             windowId: newWindow.id,
                             url: tab.url,
@@ -1179,6 +1258,13 @@ class TabManager {
     }
 
     private handleKeyboardShortcuts(event: KeyboardEvent): void {
+        // Leave shortcuts alone while the user is typing in a form field
+        // (e.g. Ctrl+A in the search box should select the text, not tabs).
+        const target = event.target as HTMLElement;
+        if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
+            return;
+        }
+
         if (event.ctrlKey || event.metaKey) {
             switch (event.key) {
                 case 'f':
@@ -1214,20 +1300,19 @@ class TabManager {
         messageElement.textContent = message;
         this.elements.statusMessage.className = `status-message ${type}`;
         this.elements.statusMessage.classList.remove('hidden');
-        
-        setTimeout(() => {
+
+        // Reset the hide timer so an earlier message's timeout doesn't
+        // dismiss this one prematurely.
+        if (this.statusMessageTimer !== null) {
+            clearTimeout(this.statusMessageTimer);
+        }
+        this.statusMessageTimer = setTimeout(() => {
             this.hideStatusMessage();
         }, 3000);
     }
 
     private hideStatusMessage(): void {
         this.elements.statusMessage.classList.add('hidden');
-    }
-
-    private escapeHtml(text: string): string {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
 
     private truncateUrl(url: string): string {
