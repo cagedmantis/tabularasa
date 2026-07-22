@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tabularasa",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Advanced tab and window manager. Group, search, and bulk-manage tabs, save sessions, and remove duplicates - all stored locally.",
   "homepage_url": "https://github.com/cagedmantis/tabularasa",
   "permissions": [

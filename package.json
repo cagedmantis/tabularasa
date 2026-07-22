@@ -1,6 +1,6 @@
 {
   "name": "tabula-rasa",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "An advanced Chrome Tab and Window Manager",
   "scripts": {
     "build": "tsc",
