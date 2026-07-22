@@ -37,6 +37,9 @@ help:
 	@echo "Package & Distribution:"
 	@echo "  package        - Create distribution package"
 	@echo "  zip            - Create ZIP file for Chrome Web Store"
+	@echo "  zip-only       - Package an already-built dist/ (no rebuild)"
+	@echo "  docker-build   - Run npm ci/build/test/lint in a container (dist/ on host)"
+	@echo "  docker-zip     - Container build + host packaging"
 	@echo "  store-prep     - Chrome Web Store preparation checklist"
 	@echo "  validate-manifest - Validate manifest.json for Chrome Web Store"
 	@echo "  screenshots    - Generate Chrome Web Store screenshots"
@@ -143,8 +146,11 @@ open-extensions:
 # Only ship what the manifest references: manifest, manager UI, compiled
 # background/manager scripts, and icon PNGs. No source maps, declaration
 # files, icon-generation scripts, or unused legacy popup files.
-.PHONY: package
-package: build test lint
+# pack assembles dist-package/ from an ALREADY-built dist/ (no build/test/lint).
+# This is the single source of truth for the shipped file list, reused by the
+# local, host, and Docker packaging paths.
+.PHONY: pack
+pack:
 	@echo "Creating distribution package..."
 	@rm -rf dist-package
 	@mkdir -p dist-package/dist dist-package/icons
@@ -153,12 +159,36 @@ package: build test lint
 	@cp $(ICONS_DIR)/icon-16.png $(ICONS_DIR)/icon-32.png $(ICONS_DIR)/icon-48.png $(ICONS_DIR)/icon-128.png dist-package/icons/
 	@echo "Package created in dist-package/"
 
+.PHONY: package
+package: build test lint pack
+
 .PHONY: zip
 zip: package
 	@echo "Creating ZIP file for Chrome Web Store..."
 	@rm -f $(EXTENSION_NAME)-$(VERSION).zip
 	@cd dist-package && zip -r ../$(EXTENSION_NAME)-$(VERSION).zip .
 	@echo "ZIP file created: $(EXTENSION_NAME)-$(VERSION).zip"
+
+# zip-only packages an already-built dist/ without rebuilding — used after the
+# Node steps have run in Docker (see docker-build). Needs only zip + python3.
+.PHONY: zip-only
+zip-only: pack
+	@echo "Creating ZIP file for Chrome Web Store..."
+	@rm -f $(EXTENSION_NAME)-$(VERSION).zip
+	@cd dist-package && zip -r ../$(EXTENSION_NAME)-$(VERSION).zip .
+	@echo "ZIP file created: $(EXTENSION_NAME)-$(VERSION).zip"
+
+# Docker-based build: run install/build/test/lint in a container so the host
+# needs no Node/npm toolchain. Produces dist/ on the host; override the image
+# with NODE_IMAGE=... if desired.
+NODE_IMAGE ?= node:22-bookworm-slim
+
+.PHONY: docker-build
+docker-build:
+	@NODE_IMAGE=$(NODE_IMAGE) sh scripts/docker-build.sh
+
+.PHONY: docker-zip
+docker-zip: docker-build zip-only
 
 .PHONY: store-prep
 store-prep: build

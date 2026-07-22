@@ -269,6 +269,25 @@ make release-major RELEASE_ARGS="--yes"         # skip the confirmation prompt
 make release-patch RELEASE_ARGS="--publish"     # publish the release (not draft)
 ```
 
+### Building in Docker (no Node toolchain on the host)
+
+The `--docker` flag runs the dependency-heavy steps — `npm ci`, build, test, and
+lint — inside a container instead of on your machine. Only the compiled `dist/`
+is written back to the host, where the extension is packaged. `node_modules`
+lives in a throwaway volume and never touches the host.
+
+```bash
+make release-patch RELEASE_ARGS="--docker"                 # build/test/lint in a container
+make release-minor RELEASE_ARGS="--docker --no-publish"    # combine with other flags
+make docker-build                                          # just the container build (dist/)
+make docker-zip                                            # container build + host packaging
+```
+
+With `--docker`, the release host needs only **docker, git, python3, zip, and
+make** (and `gh` for the GitHub release) — no Node, npm, or TypeScript install.
+The image defaults to `node:22-bookworm-slim`; override it with
+`NODE_IMAGE=node:20-bookworm-slim make docker-build`.
+
 The changelog groups commits by [Conventional Commit](https://www.conventionalcommits.org/)
 type (`feat`, `fix`, `docs`, …) and falls back to a plain bulleted list when the
 history does not use the convention.

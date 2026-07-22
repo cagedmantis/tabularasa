@@ -10,6 +10,8 @@
 #   --no-publish    Do the local bump/commit/tag/package but do not push or
 #                   create a GitHub release.
 #   --publish       Publish the GitHub release immediately (default: draft).
+#   --docker        Run install/build/test/lint in a container (host needs no
+#                   Node/npm toolchain); package on the host.
 #
 # What a real release does, in order:
 #   1. Preflight: required tools, on release branch, clean tree, tag is free.
@@ -36,7 +38,7 @@ usage() {
 
 # --- parse arguments ------------------------------------------------------
 BUMP=''
-DRY=0; ASSUME_YES=0; NO_PUBLISH=0; DRAFT=1
+DRY=0; ASSUME_YES=0; NO_PUBLISH=0; DRAFT=1; USE_DOCKER=0
 for arg in "$@"; do
 	case "$arg" in
 		major|minor|patch) BUMP=$arg ;;
@@ -44,6 +46,7 @@ for arg in "$@"; do
 		--yes|-y)    ASSUME_YES=1 ;;
 		--no-publish) NO_PUBLISH=1 ;;
 		--publish)   DRAFT=0 ;;
+		--docker)    USE_DOCKER=1 ;;
 		-h|--help)   usage; exit 0 ;;
 		*) die "unknown argument: '$arg' (see --help)" ;;
 	esac
@@ -79,8 +82,9 @@ if [ "$DRY" -eq 1 ]; then
 fi
 
 # --- preflight for a real release -----------------------------------------
-require_cmd npm
+require_cmd make
 require_cmd zip
+if [ "$USE_DOCKER" -eq 1 ]; then require_cmd docker; else require_cmd npm; fi
 assert_on_release_branch
 assert_clean_tree
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1 && die "tag $TAG already exists"
@@ -110,8 +114,13 @@ set_json_version "$MANIFEST" "$NEW"
 validate_manifest "$MANIFEST" "$NEW"
 
 # --- 2. build, test, lint, package (reuses the Makefile) ------------------
-info "Building, testing, and packaging via 'make zip'"
-make zip
+if [ "$USE_DOCKER" -eq 1 ]; then
+	info "Building/testing/linting in Docker; packaging on the host"
+	make docker-zip
+else
+	info "Building, testing, and packaging via 'make zip'"
+	make zip
+fi
 [ -f "$ARTIFACT" ] || die "expected artifact not produced: $ARTIFACT"
 
 # --- 3. commit + annotated tag --------------------------------------------
