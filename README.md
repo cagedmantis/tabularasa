@@ -1,6 +1,6 @@
 # Tabularasa - An Advanced Chrome Tab and Window Manager
 
-[![CI](https://github.com/cagedmantis/tabularasa/actions/workflows/ci.yml/badge.svg)](https://github.com/carlos/tabularasa/actions/workflows/ci.yml)
+[![CI](https://github.com/cagedmantis/tabularasa/actions/workflows/ci.yml/badge.svg)](https://github.com/cagedmantis/tabularasa/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-4285F4?logo=google-chrome&logoColor=white)](https://chrome.google.com/webstore)
 
@@ -210,6 +210,68 @@ The test suite covers:
 - URL parsing and validation
 - HTML escaping and security
 - Utility functions and helpers
+
+## Releasing
+
+Releases are automated through the `Makefile` and the POSIX helper scripts in
+[`scripts/`](scripts/). The version in `manifest.json` is the single source of
+truth; Git tags mirror it as `vX.Y.Z`.
+
+### Prerequisites
+
+- A working build toolchain: run `npm ci` first (the release builds, tests, and
+  lints before packaging).
+- Optional: the [GitHub CLI](https://cli.github.com/) (`gh`), authenticated. If
+  present, a **draft** GitHub Release is created with the changelog and the
+  packaged `.zip`. If absent, the local tag and artifact are still produced.
+
+### Preview first (changes nothing)
+
+```bash
+make release-preview            # preview a minor bump (default)
+make release-preview BUMP=major # preview a major bump
+make changelog                  # print the changelog since the last tag
+```
+
+### Cut a release
+
+```bash
+make release-minor   # e.g. 1.2.3 -> 1.3.0
+make release-major   # e.g. 1.2.3 -> 2.0.0
+make release-patch   # e.g. 1.2.3 -> 1.2.4
+```
+
+Each release target, in order:
+
+1. **Preflight** — verifies required tools, that you are on the primary branch
+   (`main`/`master`), that the working tree is completely clean (no uncommitted
+   *or* untracked files), and that the target tag does not already exist.
+2. **Bumps** `manifest.json` and `package.json` to the new version.
+3. **Validates** `manifest.json` — valid JSON, Manifest V3, required keys, and
+   the version matches the target.
+4. **Builds, tests, lints, and packages** the Web Store artifact via `make zip`
+   (`tabularasa-X.Y.Z.zip`, containing only runtime files).
+5. **Commits** the bump and creates an **annotated tag** whose message contains
+   the changelog.
+6. **Pushes** the branch and tag, and creates a **draft GitHub Release** (when
+   `gh` is available) with the changelog and the `.zip` attached.
+
+If any step before the commit fails, the working-tree version bump is rolled
+back automatically.
+
+### Flags
+
+Pass options through `RELEASE_ARGS`:
+
+```bash
+make release-minor RELEASE_ARGS="--no-publish"  # local commit + tag + zip only
+make release-major RELEASE_ARGS="--yes"         # skip the confirmation prompt
+make release-patch RELEASE_ARGS="--publish"     # publish the release (not draft)
+```
+
+The changelog groups commits by [Conventional Commit](https://www.conventionalcommits.org/)
+type (`feat`, `fix`, `docs`, …) and falls back to a plain bulleted list when the
+history does not use the convention.
 
 ## Technologies Used
 
