@@ -66,6 +66,9 @@ interface SessionInfo {
 
 // Global state
 class TabManager {
+    private static readonly FALLBACK_FAVICON =
+        'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
+
     private tabs: TabInfo[] = [];
     private windows: WindowInfo[] = [];
     private tabGroups: TabGroupInfo[] = [];
@@ -509,7 +512,10 @@ class TabManager {
         const favicon = document.createElement('img');
         favicon.className = 'tab-favicon';
         favicon.alt = 'Favicon';
-        favicon.src = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
+        favicon.src = this.getFaviconUrl(tab.url);
+        favicon.addEventListener('error', () => {
+            favicon.src = TabManager.FALLBACK_FAVICON;
+        }, { once: true });
         tabElement.appendChild(favicon);
 
         // Create single line content with title and truncated URL
@@ -1313,6 +1319,25 @@ class TabManager {
 
     private hideStatusMessage(): void {
         this.elements.statusMessage.classList.add('hidden');
+    }
+
+    /**
+     * Resolves a tab's favicon through Chrome's local favicon cache
+     * (chrome-extension://<id>/_favicon) instead of fetching tab.favIconUrl
+     * directly. Sites that send a Cross-Origin-Resource-Policy header block
+     * that direct cross-origin fetch (ERR_BLOCKED_BY_RESPONSE.NotSameOrigin);
+     * the _favicon endpoint reads Chrome's cache locally, so it never issues
+     * a cross-origin request and never hits that block. Requires the
+     * "favicon" permission in manifest.json.
+     */
+    private getFaviconUrl(pageUrl: string): string {
+        if (!pageUrl) {
+            return TabManager.FALLBACK_FAVICON;
+        }
+        const faviconUrl = new URL(chrome.runtime.getURL('/_favicon/'));
+        faviconUrl.searchParams.set('pageUrl', pageUrl);
+        faviconUrl.searchParams.set('size', '32');
+        return faviconUrl.toString();
     }
 
     private truncateUrl(url: string): string {

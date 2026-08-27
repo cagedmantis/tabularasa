@@ -175,6 +175,52 @@ describe('TabManager', () => {
         });
     });
 
+    describe('favicons', () => {
+        test('resolves favicons through the local _favicon endpoint instead of fetching tab.favIconUrl directly', async () => {
+            // tab.favIconUrl points at a third-party host; loading it directly
+            // as <img src> from the extension's own document is what caused
+            // ERR_BLOCKED_BY_RESPONSE.NotSameOrigin on sites that send a
+            // Cross-Origin-Resource-Policy header. The _favicon endpoint reads
+            // Chrome's local favicon cache instead, so it must never appear
+            // in the rendered <img src>.
+            await createManager({
+                tabs: [createMockTab({
+                    id: 1,
+                    url: 'https://example.com/page',
+                    favIconUrl: 'https://example.com/favicon.ico'
+                })]
+            });
+
+            const favicon = document.querySelector('.tab-favicon');
+            expect(favicon.src).not.toContain('example.com/favicon.ico');
+            expect(favicon.src).toContain('/_favicon/');
+
+            const params = new URL(favicon.src).searchParams;
+            expect(params.get('pageUrl')).toBe('https://example.com/page');
+            expect(params.get('size')).toBe('32');
+        });
+
+        test('falls back to the placeholder icon for a tab with no URL', async () => {
+            await createManager({
+                tabs: [createMockTab({ id: 1, url: '' })]
+            });
+
+            const favicon = document.querySelector('.tab-favicon');
+            expect(favicon.src.startsWith('data:image/svg+xml,')).toBe(true);
+        });
+
+        test('falls back to the placeholder icon if the favicon request errors', async () => {
+            await createManager({
+                tabs: [createMockTab({ id: 1, url: 'https://example.com/page' })]
+            });
+
+            const favicon = document.querySelector('.tab-favicon');
+            favicon.dispatchEvent(new window.Event('error'));
+
+            expect(favicon.src.startsWith('data:image/svg+xml,')).toBe(true);
+        });
+    });
+
     describe('selection', () => {
         test('selecting a tab enables bulk actions and updates counts', async () => {
             const manager = await createManager({

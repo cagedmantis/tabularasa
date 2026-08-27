@@ -5,3 +5,4 @@ dist/
 dist-package/
 *.zip
 tests/coverage/
+IMPROVEMENTS.md
