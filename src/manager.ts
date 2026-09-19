@@ -66,6 +66,12 @@ interface SessionInfo {
 
 // Global state
 class TabManager {
+    // Schemes a saved session may contain. Everything else (chrome://,
+    // chrome-extension:// including this page, devtools://, javascript:,
+    // about:, ...) either cannot be opened by an extension or must not be,
+    // and is skipped both when saving and when restoring.
+    private static readonly RESTORABLE_PROTOCOLS = new Set(['http:', 'https:', 'file:']);
+
     private static readonly FALLBACK_FAVICON =
         'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
 
@@ -79,6 +85,7 @@ class TabManager {
     private filterType: 'all' | 'active' | 'pinned' | 'audible' | 'grouped' = 'all';
     private loading: boolean = false;
     private statusMessageTimer: ReturnType<typeof setTimeout> | null = null;
+    private restoringSession: boolean = false;
 
     // DOM elements
     private elements = {
@@ -1124,6 +1131,37 @@ class TabManager {
         this.showTabView();
     }
 
+    private isRestorableUrl(url: string): boolean {
+        try {
+            return TabManager.RESTORABLE_PROTOCOLS.has(new URL(url).protocol);
+        } catch {
+            return false;
+        }
+    }
+
+    private async snapshotWindow(window: chrome.windows.Window): Promise<SessionInfo['windows'][number]> {
+        const groups = await chrome.tabGroups.query({ windowId: window.id });
+        return {
+            id: window.id!,
+            tabs: (window.tabs || [])
+                // A tab that is still loading has no url yet, only pendingUrl.
+                .map(tab => ({ tab, url: tab.url || tab.pendingUrl || '' }))
+                .filter(({ url }) => this.isRestorableUrl(url))
+                .map(({ tab, url }) => ({
+                    url,
+                    title: tab.title || '',
+                    pinned: tab.pinned,
+                    muted: tab.mutedInfo?.muted || false,
+                    groupId: tab.groupId
+                })),
+            groups: groups.map(group => ({
+                id: group.id,
+                title: group.title,
+                color: group.color
+            }))
+        };
+    }
+
     private async saveSession(): Promise<void> {
         const sessionName = (document.getElementById('session-name') as HTMLInputElement).value.trim();
         const saveType = (document.querySelector('input[name="save-type"]:checked') as HTMLInputElement).value;
@@ -1141,46 +1179,22 @@ class TabManager {
                 windows: []
             };
 
-            if (saveType === 'current') {
-                const currentWindow = await chrome.windows.getCurrent({ populate: true });
-                const groups = await chrome.tabGroups.query({ windowId: currentWindow.id });
-                
-                session.windows.push({
-                    id: currentWindow.id!,
-                    tabs: (currentWindow.tabs || []).map(tab => ({
-                        url: tab.url || '',
-                        title: tab.title || '',
-                        pinned: tab.pinned,
-                        muted: tab.mutedInfo?.muted || false,
-                        groupId: tab.groupId
-                    })),
-                    groups: groups.map(group => ({
-                        id: group.id,
-                        title: group.title,
-                        color: group.color
-                    }))
-                });
-            } else {
-                const windows = await chrome.windows.getAll({ populate: true });
+            const windows = saveType === 'current'
+                ? [await chrome.windows.getCurrent({ populate: true })]
                 // Never persist incognito windows (see loadTabs).
-                for (const window of windows.filter(w => w.type === 'normal' && !w.incognito)) {
-                    const groups = await chrome.tabGroups.query({ windowId: window.id });
-                    session.windows.push({
-                        id: window.id!,
-                        tabs: (window.tabs || []).map(tab => ({
-                            url: tab.url || '',
-                            title: tab.title || '',
-                            pinned: tab.pinned,
-                            muted: tab.mutedInfo?.muted || false,
-                            groupId: tab.groupId
-                        })),
-                        groups: groups.map(group => ({
-                            id: group.id,
-                            title: group.title,
-                            color: group.color
-                        }))
-                    });
+                : (await chrome.windows.getAll({ populate: true }))
+                    .filter(w => w.type === 'normal' && !w.incognito);
+
+            for (const window of windows) {
+                const snapshot = await this.snapshotWindow(window);
+                if (snapshot.tabs.length > 0) {
+                    session.windows.push(snapshot);
                 }
+            }
+
+            if (session.windows.length === 0) {
+                this.showStatusMessage('No tabs that can be saved', 'warning');
+                return;
             }
 
             this.sessions.push(session);
@@ -1196,76 +1210,110 @@ class TabManager {
     }
 
     async openSession(sessionId: string): Promise<void> {
+        const session = this.sessions.find(s => s.id === sessionId);
+        if (!session) {return;}
+
+        // Restoring awaits one Chrome call per tab, so a second click on
+        // Open would otherwise restore the session twice.
+        if (this.restoringSession) {
+            this.showStatusMessage('A session is already being restored', 'warning');
+            return;
+        }
+
+        this.restoringSession = true;
         try {
-            const session = this.sessions.find(s => s.id === sessionId);
-            if (!session) {return;}
-
+            let total = 0;
+            let restored = 0;
             for (const windowData of session.windows) {
-                const tabs = windowData.tabs.filter(tab => tab.url && !tab.url.startsWith('chrome://'));
-                if (tabs.length === 0) {continue;}
-
-                const newWindow = await chrome.windows.create({ 
-                    url: tabs[0].url,
-                    focused: false 
-                });
-
-                // Create tab groups first
-                const tabsRestoredInGroups = new Set<typeof tabs[number]>();
-                for (const groupData of windowData.groups) {
-                    const tabsInGroup = tabs.filter(tab => tab.groupId === groupData.id);
-                    if (tabsInGroup.length > 0) {
-                        const tabIds = [];
-                        for (const tab of tabsInGroup) {
-                            tabsRestoredInGroups.add(tab);
-                            if (tab !== tabs[0]) { // Skip first tab as it's already created
-                                const newTab = await chrome.tabs.create({
-                                    windowId: newWindow.id,
-                                    url: tab.url,
-                                    pinned: tab.pinned,
-                                    active: false
-                                });
-                                if (tab.muted) {
-                                    await chrome.tabs.update(newTab.id!, { muted: true });
-                                }
-                                tabIds.push(newTab.id!);
-                            } else {
-                                tabIds.push(newWindow.tabs![0].id!);
-                            }
-                        }
-
-                        const newGroupId = await chrome.tabs.group({ tabIds });
-                        await chrome.tabGroups.update(newGroupId, {
-                            title: groupData.title,
-                            color: groupData.color
-                        });
-                    }
-                }
-
-                // Add remaining tabs. Ungrouped tabs have a groupId of -1 (or
-                // undefined), so restore every tab that wasn't part of a group
-                // recreated above.
-                for (let i = 1; i < tabs.length; i++) {
-                    const tab = tabs[i];
-                    if (!tabsRestoredInGroups.has(tab)) {
-                        const newTab = await chrome.tabs.create({
-                            windowId: newWindow.id,
-                            url: tab.url,
-                            pinned: tab.pinned,
-                            active: false
-                        });
-
-                        if (tab.muted) {
-                            await chrome.tabs.update(newTab.id!, { muted: true });
-                        }
-                    }
-                }
+                total += windowData.tabs.length;
+                restored += await this.restoreWindow(windowData);
             }
 
-            this.showStatusMessage(`Session "${session.name}" opened`);
-        } catch (error) {
-            console.error('Error opening session:', error);
-            this.showStatusMessage('Error opening session', 'error');
+            if (restored === total) {
+                this.showStatusMessage(`Session "${session.name}" opened`);
+            } else {
+                this.showStatusMessage(
+                    `Session "${session.name}": restored ${restored} of ${total} tabs (${total - restored} skipped)`,
+                    restored === 0 ? 'error' : 'warning'
+                );
+            }
+        } finally {
+            this.restoringSession = false;
         }
+    }
+
+    /**
+     * Recreates one saved window and returns how many of its tabs were
+     * restored. Tabs are created in saved order (Chrome keeps pinned tabs
+     * first and group members adjacent, so appending preserves the layout)
+     * and each failure is contained to the tab or group it concerns.
+     */
+    private async restoreWindow(windowData: SessionInfo['windows'][number]): Promise<number> {
+        // Sessions saved by older versions may hold URLs that are no longer
+        // accepted, so filter here as well as when saving.
+        const tabs = windowData.tabs.filter(tab => this.isRestorableUrl(tab.url));
+        if (tabs.length === 0) {return 0;}
+
+        const restoredTabIds = new Map<typeof tabs[number], number>();
+        const [first] = tabs;
+        let windowId: number;
+        try {
+            // The first tab comes with the window.
+            const newWindow = await chrome.windows.create({ url: first.url, focused: false });
+            windowId = newWindow.id!;
+            restoredTabIds.set(first, newWindow.tabs![0].id!);
+        } catch (error) {
+            console.error('Error restoring window:', error);
+            return 0;
+        }
+
+        if (first.pinned || first.muted) {
+            try {
+                // windows.create cannot set these, so apply them afterwards.
+                await chrome.tabs.update(restoredTabIds.get(first)!, { pinned: first.pinned, muted: first.muted });
+            } catch (error) {
+                console.warn(`Could not restore tab state for ${first.url}:`, error);
+            }
+        }
+
+        for (const tab of tabs.slice(1)) {
+            try {
+                const newTab = await chrome.tabs.create({
+                    windowId,
+                    url: tab.url,
+                    pinned: tab.pinned,
+                    active: false
+                });
+                restoredTabIds.set(tab, newTab.id!);
+                if (tab.muted) {
+                    await chrome.tabs.update(newTab.id!, { muted: true });
+                }
+            } catch (error) {
+                console.warn(`Could not restore ${tab.url}:`, error);
+            }
+        }
+
+        for (const groupData of windowData.groups) {
+            const tabIds = tabs
+                .filter(tab => tab.groupId === groupData.id && restoredTabIds.has(tab))
+                .map(tab => restoredTabIds.get(tab)!);
+            if (tabIds.length === 0) {continue;}
+
+            try {
+                // Without an explicit windowId the group is created in the
+                // current window, which would pull the tabs into the
+                // manager's window.
+                const newGroupId = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
+                await chrome.tabGroups.update(newGroupId, {
+                    title: groupData.title,
+                    color: groupData.color
+                });
+            } catch (error) {
+                console.warn(`Could not restore group ${groupData.title || groupData.id}:`, error);
+            }
+        }
+
+        return restoredTabIds.size;
     }
 
     async deleteSession(sessionId: string): Promise<void> {

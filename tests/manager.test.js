@@ -452,6 +452,180 @@ describe('TabManager', () => {
             expect(createdUrls).toEqual(['https://b.com/', 'https://c.com/']);
         });
 
+        const savedTab = (url, overrides = {}) =>
+            ({ url, title: url, pinned: false, muted: false, groupId: -1, ...overrides });
+
+        // Give every created tab its own id so grouping can be asserted.
+        const mockTabIds = () => {
+            let nextId = 1000;
+            chrome.tabs.create.mockImplementation(async ({ url }) => ({ id: nextId++, url }));
+        };
+
+        test('restore applies pinned and muted to the first tab', async () => {
+            const manager = await createManager({
+                sessions: [createMockSession({
+                    id: 's',
+                    windows: [{ id: 1, tabs: [savedTab('https://a.com/', { pinned: true, muted: true })], groups: [] }]
+                })]
+            });
+
+            await manager.openSession('s');
+
+            expect(chrome.tabs.update).toHaveBeenCalledWith(901, { pinned: true, muted: true });
+        });
+
+        test('restore keeps the saved tab order and groups inside the new window', async () => {
+            const manager = await createManager({
+                sessions: [createMockSession({
+                    id: 's',
+                    windows: [{
+                        id: 1,
+                        tabs: [
+                            savedTab('https://a.com/'),
+                            savedTab('https://b.com/'),
+                            savedTab('https://c.com/', { groupId: 10 }),
+                            savedTab('https://d.com/', { groupId: 10 }),
+                            savedTab('https://e.com/')
+                        ],
+                        groups: [{ id: 10, title: 'Work', color: 'green' }]
+                    }]
+                })]
+            });
+            mockTabIds();
+
+            await manager.openSession('s');
+
+            expect(chrome.tabs.create.mock.calls.map(([opts]) => opts.url))
+                .toEqual(['https://b.com/', 'https://c.com/', 'https://d.com/', 'https://e.com/']);
+            expect(chrome.tabs.group).toHaveBeenCalledTimes(1);
+            expect(chrome.tabs.group).toHaveBeenCalledWith({
+                tabIds: [1001, 1002],
+                createProperties: { windowId: 99 }
+            });
+        });
+
+        test('restore skips URLs that are not http, https or file', async () => {
+            const manager = await createManager({
+                sessions: [createMockSession({
+                    id: 's',
+                    windows: [{
+                        id: 1,
+                        tabs: [
+                            savedTab('chrome-extension://test-extension-id/manager.html'),
+                            savedTab('javascript:alert(1)'),
+                            savedTab('https://a.com/'),
+                            savedTab('chrome://settings/'),
+                            savedTab('data:text/html,<script>alert(1)</script>'),
+                            savedTab('view-source:https://a.com/'),
+                            savedTab('not a url'),
+                            savedTab('file:///tmp/notes.txt')
+                        ],
+                        groups: []
+                    }]
+                })]
+            });
+
+            await manager.openSession('s');
+
+            expect(chrome.windows.create).toHaveBeenCalledWith({ url: 'https://a.com/', focused: false });
+            expect(chrome.tabs.create.mock.calls.map(([opts]) => opts.url)).toEqual(['file:///tmp/notes.txt']);
+            const status = document.getElementById('status-message');
+            expect(status.textContent).toContain('restored 2 of 8 tabs (6 skipped)');
+            expect(status.classList.contains('warning')).toBe(true);
+        });
+
+        test('one tab failing to open does not stop the rest of the restore', async () => {
+            const manager = await createManager({
+                sessions: [createMockSession({
+                    id: 's',
+                    windows: [
+                        { id: 1, tabs: [savedTab('https://a.com/'), savedTab('https://bad.com/'), savedTab('https://c.com/')], groups: [] },
+                        { id: 2, tabs: [savedTab('https://d.com/')], groups: [] }
+                    ]
+                })]
+            });
+            chrome.tabs.create.mockImplementation(async ({ url }) => {
+                if (url === 'https://bad.com/') {
+                    throw new Error('blocked');
+                }
+                return { id: 900 };
+            });
+
+            await manager.openSession('s');
+
+            expect(chrome.tabs.create.mock.calls.map(([opts]) => opts.url))
+                .toEqual(['https://bad.com/', 'https://c.com/']);
+            expect(chrome.windows.create).toHaveBeenCalledTimes(2);
+            expect(document.getElementById('status-message').textContent)
+                .toContain('restored 3 of 4 tabs (1 skipped)');
+        });
+
+        test('a window that cannot be created is reported, and later windows still open', async () => {
+            const manager = await createManager({
+                sessions: [createMockSession({
+                    id: 's',
+                    windows: [
+                        { id: 1, tabs: [savedTab('https://a.com/')], groups: [] },
+                        { id: 2, tabs: [savedTab('https://b.com/')], groups: [] }
+                    ]
+                })]
+            });
+            chrome.windows.create.mockRejectedValueOnce(new Error('nope'));
+
+            await manager.openSession('s');
+
+            expect(chrome.windows.create).toHaveBeenCalledTimes(2);
+            expect(document.getElementById('status-message').textContent)
+                .toContain('restored 1 of 2 tabs');
+        });
+
+        test('a second Open while a restore is running does not restore twice', async () => {
+            const manager = await createManager({ sessions: [session()] });
+
+            const first = manager.openSession('session-1');
+            const second = manager.openSession('session-1');
+            await Promise.all([first, second]);
+
+            expect(chrome.windows.create).toHaveBeenCalledTimes(1);
+
+            // The guard is released afterwards
+            await manager.openSession('session-1');
+            expect(chrome.windows.create).toHaveBeenCalledTimes(2);
+        });
+
+        test('saving keeps loading tabs via pendingUrl and drops unrestorable ones', async () => {
+            const manager = await createManager();
+            chrome.windows.getCurrent.mockResolvedValue(createMockWindow({
+                id: 1,
+                tabs: [
+                    createMockTab({ id: 1, url: 'https://a.com/' }),
+                    createMockTab({ id: 2, url: '', pendingUrl: 'https://loading.example/' }),
+                    createMockTab({ id: 3, url: 'chrome-extension://test-extension-id/manager.html' }),
+                    createMockTab({ id: 4, url: 'chrome://newtab/' })
+                ]
+            }));
+            document.getElementById('session-name').value = 'Mine';
+
+            await manager.saveSession();
+
+            const saved = chrome.storage.local.set.mock.calls[0][0].sessions[0];
+            expect(saved.windows[0].tabs.map(tab => tab.url))
+                .toEqual(['https://a.com/', 'https://loading.example/']);
+        });
+
+        test('saving a window with nothing restorable saves no session', async () => {
+            const manager = await createManager();
+            chrome.windows.getCurrent.mockResolvedValue(createMockWindow({
+                id: 1,
+                tabs: [createMockTab({ id: 1, url: 'chrome://newtab/' })]
+            }));
+            document.getElementById('session-name').value = 'Empty';
+
+            await manager.saveSession();
+
+            expect(chrome.storage.local.set).not.toHaveBeenCalled();
+        });
+
         test('deleteSession persists the remaining sessions', async () => {
             const manager = await createManager({ sessions: [session()] });
 
