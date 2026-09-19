@@ -1134,12 +1134,6 @@ class TabManager {
     }
 
     /**
-     * Gate for every bulk close. Asks before a large close, or one that
-     * includes tabs the user cannot currently see; small, fully visible
-     * closes go ahead because they can be undone. Returns the tabs to close,
-     * which is empty when the user declined.
-     */
-    /**
      * A tab's title as one short, plain line for a confirm() dialog. Titles
      * come from web pages: strip control and bidirectional-override
      * characters (newlines could fake extra dialog lines, overrides could
@@ -1156,6 +1150,12 @@ class TabManager {
             : label;
     }
 
+    /**
+     * Gate for every bulk close. Asks before a large close, or one that
+     * includes tabs the user cannot currently see; small, fully visible
+     * closes go ahead because they can be undone. Returns the tabs to close,
+     * which is empty when the user declined.
+     */
     private async confirmClose(tabs: TabInfo[], options: { listTabs?: boolean } = {}): Promise<TabInfo[]> {
         const hiddenCount = this.countHidden(tabs.map(tab => tab.id));
         // listTabs is for closes where the program, not the user, picked the
