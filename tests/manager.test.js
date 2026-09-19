@@ -18,10 +18,15 @@ const TabManager = window.TabManager;
 
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 
-async function createManager({ tabs = [], windows = [], groups = [], sessions = [] } = {}) {
+async function createManager({ tabs = [], windows = [], groups = [], sessions = [], ownTabId } = {}) {
     document.body.innerHTML = bodyHtml;
 
     chrome.tabs.query.mockResolvedValue(tabs);
+    if (ownTabId instanceof Error) {
+        chrome.tabs.getCurrent.mockRejectedValue(ownTabId);
+    } else {
+        chrome.tabs.getCurrent.mockResolvedValue(ownTabId === undefined ? undefined : { id: ownTabId });
+    }
     chrome.windows.getAll.mockResolvedValue(windows);
     chrome.tabGroups.query.mockResolvedValue(groups);
     chrome.storage.local.get.mockResolvedValue({ sessions });
@@ -265,6 +270,106 @@ describe('TabManager', () => {
 
             document.body.dispatchEvent(ctrlA());
             expect(document.getElementById('selected-count').textContent).toBe('2 selected');
+        });
+    });
+
+    describe('the manager\'s own tab', () => {
+        const manyTabs = () => Array.from({ length: 25 }, (_, i) =>
+            createMockTab({ id: i + 1, url: `https://example.com/${i + 1}` }));
+
+        test('Close All closes the bucket in one call and spares the manager tab', async () => {
+            await createManager({
+                tabs: manyTabs(),
+                windows: [createMockWindow({ id: 1, focused: true })],
+                ownTabId: 3
+            });
+
+            document.querySelector('.tab-group-actions .btn-danger').click();
+            await flush();
+
+            expect(chrome.tabs.remove).toHaveBeenCalledTimes(1);
+            const closed = chrome.tabs.remove.mock.calls[0][0];
+            expect(closed).toHaveLength(24);
+            expect(closed).not.toContain(3);
+        });
+
+        test('Close All on a bucket holding only the manager tab closes nothing', async () => {
+            await createManager({
+                tabs: [createMockTab({ id: 3 })],
+                windows: [createMockWindow({ id: 1, focused: true })],
+                ownTabId: 3
+            });
+
+            document.querySelector('.tab-group-actions .btn-danger').click();
+            await flush();
+
+            expect(chrome.tabs.remove).not.toHaveBeenCalled();
+        });
+
+        test('Close All refreshes the list even when the close is rejected', async () => {
+            await createManager({
+                tabs: [createMockTab({ id: 1 }), createMockTab({ id: 2 })],
+                windows: [createMockWindow({ id: 1, focused: true })]
+            });
+            chrome.tabs.remove.mockRejectedValueOnce(new Error('No tab with id: 2'));
+            chrome.tabs.query.mockResolvedValue([]);
+
+            document.querySelector('.tab-group-actions .btn-danger').click();
+            await flush();
+
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(0);
+            expect(document.getElementById('status-message').classList.contains('error')).toBe(true);
+        });
+
+        test('cannot be selected, individually or via select all', async () => {
+            const manager = await createManager({
+                tabs: [createMockTab({ id: 1 }), createMockTab({ id: 2 }), createMockTab({ id: 3 })],
+                windows: [createMockWindow({ id: 1, focused: true })],
+                ownTabId: 3
+            });
+
+            expect(document.querySelector('[data-tab-id="3"] .tab-checkbox').disabled).toBe(true);
+            expect(document.querySelector('[data-tab-id="1"] .tab-checkbox').disabled).toBe(false);
+
+            manager.toggleTabSelection(3);
+            expect(document.getElementById('selected-count').textContent).toBe('0 selected');
+
+            document.getElementById('select-all').click();
+            expect(document.getElementById('selected-count').textContent).toBe('2 selected');
+
+            document.getElementById('deselect-all').click();
+            document.querySelector('.tab-group-actions .btn-secondary').click();
+            expect(document.getElementById('selected-count').textContent).toBe('2 selected');
+
+            await manager.closeSelectedTabs();
+            expect(chrome.tabs.remove).toHaveBeenCalledWith([1, 2]);
+        });
+
+        test('closeDuplicateTabs never closes the manager tab', async () => {
+            const url = 'chrome-extension://test-extension-id/manager.html';
+            const manager = await createManager({
+                tabs: [
+                    createMockTab({ id: 1, url, lastAccessed: 3000 }),
+                    createMockTab({ id: 2, url, lastAccessed: 1000 })
+                ],
+                ownTabId: 2
+            });
+
+            await manager.closeDuplicateTabs();
+
+            expect(chrome.tabs.remove).toHaveBeenCalledTimes(1);
+            expect(chrome.tabs.remove).toHaveBeenCalledWith(1);
+        });
+
+        test('still works when the own tab cannot be resolved', async () => {
+            const manager = await createManager({
+                tabs: [createMockTab({ id: 1 })],
+                ownTabId: new Error('unavailable')
+            });
+
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(1);
+            manager.toggleTabSelection(1);
+            expect(document.getElementById('selected-count').textContent).toBe('1 selected');
         });
     });
 
