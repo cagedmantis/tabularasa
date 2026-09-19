@@ -60,6 +60,7 @@ global.chrome = {
         }
     },
     windows: {
+        WINDOW_ID_NONE: -1,
         getAll: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),

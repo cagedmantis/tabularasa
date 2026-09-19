@@ -260,10 +260,73 @@ describe('TabManager', () => {
             await wait(REFRESH_DELAY_MS + 50);
             expect(chrome.tabs.query).not.toHaveBeenCalled();
 
+            // Shown again: refreshed at once, not after the coalescing delay
             setHidden(false);
-            await wait(REFRESH_DELAY_MS + 50);
+            await flush();
             expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
             expect(document.querySelectorAll('.tab-item')).toHaveLength(0);
+        });
+
+        test('a refresh already scheduled when the page is hidden still runs, once', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+            chrome.tabs.query.mockClear();
+
+            fire(chrome.tabs.onUpdated, 1, {});
+            setHidden(true);
+            await wait(REFRESH_DELAY_MS + 50);
+
+            // The pending refresh still runs once; nothing further is scheduled
+            expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
+        });
+
+        test('switching to another application does not cause a refresh', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+            chrome.tabs.query.mockClear();
+
+            fire(chrome.windows.onFocusChanged, chrome.windows.WINDOW_ID_NONE);
+            await wait(REFRESH_DELAY_MS + 50);
+            expect(chrome.tabs.query).not.toHaveBeenCalled();
+
+            fire(chrome.windows.onFocusChanged, 2);
+            await wait(REFRESH_DELAY_MS + 50);
+            expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
+        });
+
+        test('a load still commits when the newer load that overtook it fails', async () => {
+            const manager = await createManager({ tabs: [createMockTab({ id: 1 })] });
+
+            let resolveSlow;
+            chrome.tabs.query
+                .mockReturnValueOnce(new Promise(resolve => { resolveSlow = resolve; }))
+                .mockRejectedValueOnce(new Error('query failed'));
+
+            const slow = manager.refreshTabs();
+            await expect(manager.refreshTabs()).rejects.toThrow('query failed');
+
+            resolveSlow([createMockTab({ id: 1 }), createMockTab({ id: 2 })]);
+            await slow;
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(2);
+        });
+
+        test('an event during the initial load does not blank the first render', async () => {
+            document.body.innerHTML = bodyHtml;
+            chrome.tabs.getCurrent.mockResolvedValue(undefined);
+            chrome.windows.getAll.mockResolvedValue([]);
+            chrome.tabGroups.query.mockResolvedValue([]);
+            chrome.storage.local.get.mockResolvedValue({ sessions: [] });
+            let resolveInitial;
+            chrome.tabs.query
+                .mockReturnValueOnce(new Promise(resolve => { resolveInitial = resolve; }))
+                .mockReturnValueOnce(new Promise(() => {})); // the event's refresh is slower still
+            new TabManager();
+
+            fire(chrome.tabs.onUpdated, 1, { status: 'loading' });
+            await wait(REFRESH_DELAY_MS + 50);             // event refresh now in flight
+            resolveInitial([createMockTab({ id: 1 })]);
+            await flush();
+
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(1);
+            expect(document.querySelector('#tabs-container .empty-state')).toBeNull();
         });
 
         test('becoming visible with nothing pending does not refresh', async () => {
@@ -342,7 +405,6 @@ describe('TabManager', () => {
             document.getElementById('deselect-all').click();
             manager.toggleTabSelection(2);
 
-            expect([row(1), row(2), row(3)]).toEqual(before);
             expect(before.every((element, i) => element === row(i + 1))).toBe(true);
             expect(row(2).classList.contains('selected')).toBe(true);
             expect(row(2).querySelector('.tab-checkbox').checked).toBe(true);
@@ -373,6 +435,77 @@ describe('TabManager', () => {
 
             expect(row(2).classList.contains('selected')).toBe(true);
             expect(row(2).querySelector('.tab-checkbox').checked).toBe(true);
+        });
+
+        test('a row is rebuilt when its favicon becomes known', async () => {
+            // Chrome reports url, then title, then favIconUrl. The _favicon
+            // URL only depends on the page URL, so without favIconUrl in the
+            // signature the row built at the title change is reused forever
+            // and keeps the placeholder icon.
+            const loading = threeTabs();
+            loading[0].favIconUrl = undefined;
+            const manager = await createManager({ tabs: loading });
+            const before = row(1);
+            const loaded = threeTabs();
+            loaded[0].favIconUrl = 'https://one.example/favicon.ico';
+            chrome.tabs.query.mockResolvedValue(loaded);
+
+            await manager.refreshTabs();
+
+            expect(row(1)).not.toBe(before);
+            expect(row(1).querySelector('.tab-favicon')).not.toBe(before.querySelector('.tab-favicon'));
+            expect(row(2).parentElement).not.toBeNull();
+        });
+
+        test('a refresh that changes nothing shown leaves the DOM and focus alone', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            const group = document.querySelector('.tab-group');
+            const closeButton = row(2).querySelector('.tab-action.close');
+            closeButton.focus();
+            const onBlur = jest.fn();
+            closeButton.addEventListener('blur', onBlur);
+            const sameButNewObjects = threeTabs();
+            sameButNewObjects[0].lastAccessed = 123456; // not shown anywhere
+            chrome.tabs.query.mockResolvedValue(sameButNewObjects);
+
+            await manager.refreshTabs();
+
+            expect(document.querySelector('.tab-group')).toBe(group);
+            expect(onBlur).not.toHaveBeenCalled();
+            expect(document.activeElement).toBe(closeButton);
+        });
+
+        test('selection still updates when the list itself is unchanged', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            manager.selectedTabs.add(3);
+
+            await manager.refreshTabs();
+
+            expect(row(3).classList.contains('selected')).toBe(true);
+            expect(document.getElementById('selected-count').textContent).toBe('1 selected');
+        });
+
+        test('when the focused row disappears, focus stays in the list', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            row(2).querySelector('.tab-action.close').focus();
+            chrome.tabs.query.mockResolvedValue([threeTabs()[0], threeTabs()[2]]);
+
+            await manager.refreshTabs();
+
+            expect(document.activeElement).toBe(document.getElementById('tabs-container'));
+        });
+
+        test('Select All right after typing uses the query in the box, not the previous one', async () => {
+            await createManager({ tabs: threeTabs() });
+            const searchInput = document.getElementById('search-input');
+            searchInput.value = 'Two';
+            searchInput.dispatchEvent(new window.Event('input'));
+
+            document.getElementById('select-all').click(); // before the debounced rebuild
+
+            expect(document.getElementById('selected-count').textContent).toBe('1 selected');
+            await wait(SEARCH_DELAY_MS + 30);
+            expect(row(2).classList.contains('selected')).toBe(true);
         });
 
         test('rows of closed tabs are forgotten', async () => {
