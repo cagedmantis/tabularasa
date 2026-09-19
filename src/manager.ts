@@ -16,6 +16,7 @@ interface TabInfo {
     mutedInfo?: chrome.tabs.MutedInfo;
     audible?: boolean;
     lastAccessed?: number;
+    index: number;
 }
 
 interface WindowInfo {
@@ -66,6 +67,13 @@ interface SessionInfo {
 
 // Global state
 class TabManager {
+    // Closing this many tabs at once (or any tab hidden by the current
+    // search/filter) asks for confirmation first.
+    private static readonly CONFIRM_CLOSE_THRESHOLD = 5;
+    private static readonly STATUS_DURATION_MS = 3000;
+    // Messages offering Undo stay up longer so there is time to react.
+    private static readonly UNDO_DURATION_MS = 10000;
+
     private static readonly FALLBACK_FAVICON =
         'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
 
@@ -224,7 +232,8 @@ class TabManager {
                 groupId: tab.groupId,
                 mutedInfo: tab.mutedInfo,
                 audible: tab.audible,
-                lastAccessed: tab.lastAccessed
+                lastAccessed: tab.lastAccessed,
+                index: tab.index
             }));
             
             this.windows = windows.map(window => ({
@@ -242,7 +251,8 @@ class TabManager {
                     groupId: tab.groupId,
                     mutedInfo: tab.mutedInfo,
                     audible: tab.audible,
-                    lastAccessed: tab.lastAccessed
+                    lastAccessed: tab.lastAccessed,
+                    index: tab.index
                 }))
             }));
 
@@ -848,7 +858,83 @@ class TabManager {
         const selectedCount = this.selectedTabs.size;
         
         this.elements.tabCount.textContent = `${totalTabs} tabs`;
-        this.elements.selectedCount.textContent = `${selectedCount} selected`;
+        const hiddenCount = this.countHidden(Array.from(this.selectedTabs));
+        this.elements.selectedCount.textContent = hiddenCount > 0
+            ? `${selectedCount} selected (${hiddenCount} hidden by filter)`
+            : `${selectedCount} selected`;
+    }
+
+    // Number of the given tabs that the current search/filter keeps off screen.
+    private countHidden(tabIds: number[]): number {
+        const visible = new Set(this.getFilteredTabs().map(tab => tab.id));
+        return tabIds.filter(tabId => !visible.has(tabId)).length;
+    }
+
+    /**
+     * Asks before a large close, or one that includes tabs the user cannot
+     * currently see. Small, fully visible closes go ahead: they can be undone.
+     */
+    private confirmClose(tabIds: number[]): boolean {
+        const hiddenCount = this.countHidden(tabIds);
+        if (tabIds.length < TabManager.CONFIRM_CLOSE_THRESHOLD && hiddenCount === 0) {
+            return true;
+        }
+        let question = `Close ${tabIds.length} tabs?`;
+        if (hiddenCount > 0) {
+            question += `\n\n${hiddenCount} of them are hidden by the current search or filter.`;
+        }
+        return window.confirm(question);
+    }
+
+    /**
+     * Shows a status message with an Undo button that reopens the given
+     * tabs. Best effort: it reopens URLs at their old position, so page
+     * state, history and group membership are not recovered.
+     */
+    private offerUndo(message: string, closedTabs: TabInfo[]): void {
+        const reopenable = closedTabs.filter(tab => tab.url);
+        if (reopenable.length === 0) {
+            this.showStatusMessage(message);
+            return;
+        }
+        this.showStatusMessage(message, 'success', {
+            label: 'Undo',
+            handler: () => this.reopenTabs(reopenable)
+        });
+    }
+
+    private async reopenTabs(closedTabs: TabInfo[]): Promise<void> {
+        let reopened = 0;
+        // Ascending index order keeps each saved index valid as tabs return.
+        const ordered = [...closedTabs].sort((a, b) => a.windowId - b.windowId || a.index - b.index);
+        for (const tab of ordered) {
+            const properties = { url: tab.url, pinned: tab.pinned, active: false };
+            try {
+                await chrome.tabs.create({ ...properties, windowId: tab.windowId, index: tab.index });
+                reopened++;
+            } catch {
+                // The window closed along with its last tab; fall back to
+                // the current window.
+                try {
+                    await chrome.tabs.create(properties);
+                    reopened++;
+                } catch (error) {
+                    console.warn(`Could not reopen ${tab.url}:`, error);
+                }
+            }
+        }
+
+        if (reopened === closedTabs.length) {
+            this.showStatusMessage(`${reopened} tabs reopened`);
+        } else {
+            this.showStatusMessage(`${reopened} of ${closedTabs.length} tabs reopened`, 'warning');
+        }
+
+        try {
+            await this.refreshTabs();
+        } catch (error) {
+            console.error('Error refreshing tabs:', error);
+        }
     }
 
     // Tab operations
@@ -868,9 +954,10 @@ class TabManager {
 
     private async closeTab(tabId: number): Promise<void> {
         try {
+            const closedTabs = this.tabs.filter(tab => tab.id === tabId);
             await chrome.tabs.remove(tabId);
             this.selectedTabs.delete(tabId);
-            this.showStatusMessage('Tab closed');
+            this.offerUndo('Tab closed', closedTabs);
             // Refresh the view immediately after closing
             await this.refreshTabs();
         } catch (error) {
@@ -884,9 +971,12 @@ class TabManager {
 
         try {
             const tabIds = Array.from(this.selectedTabs);
+            if (!this.confirmClose(tabIds)) {return;}
+
+            const closedTabs = this.tabs.filter(tab => this.selectedTabs.has(tab.id));
             await chrome.tabs.remove(tabIds);
             this.selectedTabs.clear();
-            this.showStatusMessage(`${tabIds.length} tabs closed`);
+            this.offerUndo(`${tabIds.length} tabs closed`, closedTabs);
             // Refresh the view immediately after closing
             await this.refreshTabs();
         } catch (error) {
@@ -901,11 +991,15 @@ class TabManager {
             this.showStatusMessage(`No tabs to close in ${groupKey}`);
             return;
         }
+        if (!this.confirmClose(tabIds)) {return;}
 
         try {
             await chrome.tabs.remove(tabIds);
             tabIds.forEach(tabId => this.selectedTabs.delete(tabId));
-            this.showStatusMessage(`${tabIds.length} tabs closed from ${groupKey}`);
+            this.offerUndo(
+                `${tabIds.length} tabs closed from ${groupKey}`,
+                tabs.filter(tab => !this.isOwnTab(tab.id))
+            );
         } catch (error) {
             // A stale id rejects the call after some of the tabs have
             // already been closed, so this may be a partial close.
@@ -1010,21 +1104,25 @@ class TabManager {
                 }
             });
 
+            if (tabsToClose.length > 0 && !this.confirmClose(tabsToClose)) {
+                return;
+            }
+
             if (tabsToClose.length > 0) {
                 // Close tabs individually to handle cases where some tabs may already be closed
-                let closedCount = 0;
+                const closedTabs: TabInfo[] = [];
                 for (const tabId of tabsToClose) {
                     try {
                         await chrome.tabs.remove(tabId);
-                        closedCount++;
+                        closedTabs.push(this.tabs.find(tab => tab.id === tabId)!);
                     } catch (error) {
                         // Tab may already be closed, continue with others
                         console.warn(`Tab ${tabId} could not be closed (may already be closed):`, error);
                     }
                 }
                 
-                if (closedCount > 0) {
-                    this.showStatusMessage(`${closedCount} duplicate tabs closed`);
+                if (closedTabs.length > 0) {
+                    this.offerUndo(`${closedTabs.length} duplicate tabs closed`, closedTabs);
                     // Refresh the tab list to update the UI
                     await this.refreshTabs();
                 } else {
@@ -1314,6 +1412,10 @@ class TabManager {
             if (sessionIndex === -1) {return;}
 
             const session = this.sessions[sessionIndex];
+            // Deleting a session cannot be undone.
+            if (!window.confirm(`Delete session "${session.name}"? This cannot be undone.`)) {
+                return;
+            }
             this.sessions.splice(sessionIndex, 1);
             await chrome.storage.local.set({ sessions: this.sessions });
             
@@ -1363,11 +1465,27 @@ class TabManager {
         this.elements.loadingIndicator.classList.toggle('hidden', !show);
     }
 
-    private showStatusMessage(message: string, type: 'success' | 'error' | 'warning' = 'success'): void {
+    private showStatusMessage(
+        message: string,
+        type: 'success' | 'error' | 'warning' = 'success',
+        action?: { label: string; handler: () => void }
+    ): void {
         const messageElement = this.elements.statusMessage.querySelector('.message-text') as HTMLElement;
         messageElement.textContent = message;
         this.elements.statusMessage.className = `status-message ${type}`;
         this.elements.statusMessage.classList.remove('hidden');
+
+        // The action belongs to this message only: replace the button's
+        // handler each time so a stale Undo can never outlive its message.
+        const actionButton = this.elements.statusMessage.querySelector('.status-action') as HTMLButtonElement;
+        actionButton.classList.toggle('hidden', !action);
+        actionButton.textContent = action?.label ?? '';
+        actionButton.onclick = action
+            ? (): void => {
+                this.hideStatusMessage();
+                action.handler();
+            }
+            : null;
 
         // Reset the hide timer so an earlier message's timeout doesn't
         // dismiss this one prematurely.
@@ -1376,11 +1494,13 @@ class TabManager {
         }
         this.statusMessageTimer = setTimeout(() => {
             this.hideStatusMessage();
-        }, 3000);
+        }, action ? TabManager.UNDO_DURATION_MS : TabManager.STATUS_DURATION_MS);
     }
 
     private hideStatusMessage(): void {
         this.elements.statusMessage.classList.add('hidden');
+        // A hidden message must not leave a live Undo behind.
+        (this.elements.statusMessage.querySelector('.status-action') as HTMLButtonElement).onclick = null;
     }
 
     /**

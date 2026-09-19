@@ -748,6 +748,12 @@ body {
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
+.status-action {
+    background: rgba(255, 255, 255, 0.9);
+    color: #212529;
+    font-weight: 600;
+}
+
 .status-message.error {
     background: #dc3545;
 }
@@ -850,4 +856,8 @@ body {
         flex-direction: column;
         gap: 8px;
     }
+}
+/* Keep the destructive bucket action apart from the selection buttons */
+.tab-group-actions .btn-danger {
+    margin-left: 16px;
 }
