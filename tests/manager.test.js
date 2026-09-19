@@ -17,6 +17,16 @@ require('../src/manager.ts');
 const TabManager = window.TabManager;
 
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Typing is debounced, so wait for the rebuild it triggers.
+const SEARCH_DELAY_MS = 100;
+async function typeSearch(text) {
+    const searchInput = document.getElementById('search-input');
+    searchInput.value = text;
+    searchInput.dispatchEvent(new window.Event('input'));
+    await wait(SEARCH_DELAY_MS + 30);
+}
 
 async function createManager({ tabs = [], windows = [], groups = [], sessions = [], ownTabId } = {}) {
     document.body.innerHTML = bodyHtml;
@@ -115,9 +125,7 @@ describe('TabManager', () => {
                 ]
             });
 
-            const searchInput = document.getElementById('search-input');
-            searchInput.value = 'github';
-            searchInput.dispatchEvent(new Event('input'));
+            await typeSearch('github');
 
             const items = document.querySelectorAll('.tab-item');
             expect(items).toHaveLength(1);
@@ -191,8 +199,6 @@ describe('TabManager', () => {
             Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
             document.dispatchEvent(new window.Event('visibilitychange'));
         };
-        const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
         afterEach(() => {
             delete document.hidden;
         });
@@ -316,6 +322,140 @@ describe('TabManager', () => {
 
             expect(document.getElementById('selected-count').textContent).toBe('1 selected');
             expect(document.querySelector('[data-tab-id="7"] .tab-checkbox').checked).toBe(true);
+        });
+    });
+
+    describe('incremental rendering', () => {
+        const threeTabs = () => [
+            createMockTab({ id: 1, title: 'One', url: 'https://one.example/' }),
+            createMockTab({ id: 2, title: 'Two', url: 'https://two.example/' }),
+            createMockTab({ id: 3, title: 'Three', url: 'https://three.example/' })
+        ];
+        const row = (id) => document.querySelector(`[data-tab-id="${id}"]`);
+
+        test('selecting does not rebuild any row', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            const before = [row(1), row(2), row(3)];
+
+            row(1).querySelector('.tab-checkbox').click();
+            document.getElementById('select-all').click();
+            document.getElementById('deselect-all').click();
+            manager.toggleTabSelection(2);
+
+            expect([row(1), row(2), row(3)]).toEqual(before);
+            expect(before.every((element, i) => element === row(i + 1))).toBe(true);
+            expect(row(2).classList.contains('selected')).toBe(true);
+            expect(row(2).querySelector('.tab-checkbox').checked).toBe(true);
+            expect(row(1).classList.contains('selected')).toBe(false);
+            expect(document.getElementById('selected-count').textContent).toBe('1 selected');
+        });
+
+        test('a refresh reuses unchanged rows and rebuilds only changed ones', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            const before = [row(1), row(2), row(3)];
+            const changed = threeTabs();
+            changed[1].title = 'Two (edited)';
+            chrome.tabs.query.mockResolvedValue(changed);
+
+            await manager.refreshTabs();
+
+            expect(row(1)).toBe(before[0]);
+            expect(row(3)).toBe(before[2]);
+            expect(row(2)).not.toBe(before[1]);
+            expect(row(2).querySelector('.tab-title').textContent).toBe('Two (edited)');
+        });
+
+        test('a reused row reflects selection changes made while it was filtered out', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            await typeSearch('One');
+            manager.selectedTabs.add(2); // selected while off screen
+            document.getElementById('clear-search').click();
+
+            expect(row(2).classList.contains('selected')).toBe(true);
+            expect(row(2).querySelector('.tab-checkbox').checked).toBe(true);
+        });
+
+        test('rows of closed tabs are forgotten', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            chrome.tabs.query.mockResolvedValue(threeTabs().slice(0, 2));
+
+            await manager.refreshTabs();
+
+            expect(Array.from(manager.tabRows.keys())).toEqual([1, 2]);
+        });
+
+        test('keyboard focus survives a refresh', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            const closeButton = row(2).querySelector('.tab-action.close');
+            closeButton.focus();
+            expect(document.activeElement).toBe(closeButton);
+            const changed = threeTabs();
+            changed[1].title = 'Two (edited)'; // forces row 2 to be rebuilt
+            chrome.tabs.query.mockResolvedValue(changed);
+
+            await manager.refreshTabs();
+
+            expect(document.activeElement).toBe(row(2).querySelector('.tab-action.close'));
+            expect(document.activeElement).not.toBe(closeButton);
+        });
+
+        test('focus outside the tab list is left alone', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            const searchInput = document.getElementById('search-input');
+            searchInput.focus();
+
+            await manager.refreshTabs();
+
+            expect(document.activeElement).toBe(searchInput);
+        });
+
+        test('typing rebuilds the list once, after the pause', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            const renderTabs = jest.spyOn(manager, 'renderTabs');
+            const searchInput = document.getElementById('search-input');
+
+            for (const text of ['T', 'Tw', 'Two']) {
+                searchInput.value = text;
+                searchInput.dispatchEvent(new window.Event('input'));
+            }
+            expect(renderTabs).not.toHaveBeenCalled();
+
+            await wait(SEARCH_DELAY_MS + 30);
+            expect(renderTabs).toHaveBeenCalledTimes(1);
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(1);
+        });
+
+        test('tab refreshes do not re-render the sessions list', async () => {
+            const manager = await createManager({ tabs: threeTabs(), sessions: [createMockSession({ id: 's' })] });
+            const sessionItem = document.querySelector('.session-item');
+            expect(sessionItem).not.toBeNull();
+
+            await manager.refreshTabs();
+            manager.toggleTabSelection(1);
+
+            expect(document.querySelector('.session-item')).toBe(sessionItem);
+        });
+
+        test('windows are fetched without their tabs', async () => {
+            await createManager({ tabs: threeTabs() });
+
+            expect(chrome.windows.getAll).toHaveBeenCalledWith();
+        });
+
+        test('equal-sized sections keep a stable order', async () => {
+            const tabs = [
+                createMockTab({ id: 1, url: 'https://zeta.example/' }),
+                createMockTab({ id: 2, url: 'https://alpha.example/' }),
+                createMockTab({ id: 3, url: 'https://mid.example/' })
+            ];
+            const manager = await createManager({ tabs });
+            document.getElementById('view-toggle').click();
+            document.getElementById('view-toggle').click(); // domains
+            expect(groupTitles()).toEqual(['alpha.example', 'mid.example', 'zeta.example']);
+
+            chrome.tabs.query.mockResolvedValue([tabs[2], tabs[0], tabs[1]]);
+            await manager.refreshTabs();
+            expect(groupTitles()).toEqual(['alpha.example', 'mid.example', 'zeta.example']);
         });
     });
 
@@ -584,9 +724,7 @@ describe('TabManager', () => {
             manager.toggleTabSelection(1);
             manager.toggleTabSelection(2);
 
-            const search = document.getElementById('search-input');
-            search.value = 'Tab 1';
-            search.dispatchEvent(new window.Event('input'));
+            await typeSearch('Tab 1');
 
             expect(document.getElementById('selected-count').textContent)
                 .toBe('2 selected (1 hidden by filter)');
