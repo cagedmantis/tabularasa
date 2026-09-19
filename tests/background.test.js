@@ -45,7 +45,7 @@ describe('background service worker', () => {
             expect(chrome.tabs.create).not.toHaveBeenCalled();
         });
 
-        test('finds a manager tab opened with a hash or query string', async () => {
+        test('queries for the manager by pattern, so a query string cannot hide it', async () => {
             chrome.tabs.query.mockResolvedValue([]);
             chrome.tabs.create.mockResolvedValue({ id: 9 });
 
@@ -76,6 +76,16 @@ describe('background service worker', () => {
             await expect(onActionClicked()).resolves.toBeUndefined();
 
             expect(chrome.tabs.create).toHaveBeenCalledWith({ url: 'manager.html', active: true });
+        });
+
+        test('does not open a second manager when only raising the window failed', async () => {
+            chrome.tabs.query.mockResolvedValue([{ id: 3, windowId: 4 }]);
+            chrome.tabs.update.mockResolvedValue(undefined);
+            chrome.windows.update.mockRejectedValue(new Error('No window with id: 4'));
+
+            await onActionClicked();
+
+            expect(chrome.tabs.create).not.toHaveBeenCalled();
         });
 
         test('never rejects, even when nothing can be opened', async () => {

@@ -26,7 +26,13 @@ async function focusExistingManager(): Promise<boolean> {
       return false;
     }
     await chrome.tabs.update(managerTab.id, { active: true });
-    await chrome.windows.update(managerTab.windowId, { focused: true });
+    try {
+      await chrome.windows.update(managerTab.windowId, { focused: true });
+    } catch (error) {
+      // The tab is active; failing to raise its window is no reason to
+      // open a second manager.
+      console.warn('Could not focus the manager window:', error);
+    }
     return true;
   } catch (error) {
     console.warn('Could not focus the manager tab, opening a new one:', error);
