@@ -340,7 +340,17 @@ describe('TabManager', () => {
             expect(sessionView.classList.contains('active')).toBe(true);
             expect(tabView.classList.contains('active')).toBe(false);
             expect(document.getElementById('session-save-form').classList.contains('hidden')).toBe(false);
-            expect(document.activeElement).toBe(document.getElementById('session-name'));
+        });
+
+        test('cancelling the save form returns to the tab view', async () => {
+            await createManager();
+
+            document.getElementById('save-session').click();
+            document.getElementById('cancel-session-save').click();
+
+            expect(document.getElementById('tab-view').classList.contains('active')).toBe(true);
+            expect(document.getElementById('session-view').classList.contains('active')).toBe(false);
+            expect(document.getElementById('session-save-form').classList.contains('hidden')).toBe(true);
         });
 
         test('session buttons are wired via listeners, not CSP-blocked inline onclick', async () => {

@@ -140,7 +140,7 @@ class TabManager {
         // Session management
         document.getElementById('save-session')?.addEventListener('click', () => this.showSaveSessionForm());
         document.getElementById('save-session-confirm')?.addEventListener('click', () => this.saveSession());
-        document.getElementById('cancel-session-save')?.addEventListener('click', () => this.hideSaveSessionForm());
+        document.getElementById('cancel-session-save')?.addEventListener('click', () => this.cancelSessionSave());
 
         // Status message close
         document.querySelector('.close-status')?.addEventListener('click', () => this.hideStatusMessage());
@@ -1110,6 +1110,13 @@ class TabManager {
             const nameInput = document.getElementById('session-name') as HTMLInputElement;
             nameInput.value = '';
         }
+    }
+
+    // The form is only ever opened from the tab view, so cancelling returns
+    // there. A successful save stays on the session view to show the result.
+    private cancelSessionSave(): void {
+        this.hideSaveSessionForm();
+        this.showTabView();
     }
 
     private async saveSession(): Promise<void> {
