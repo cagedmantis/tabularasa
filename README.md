@@ -336,8 +336,6 @@ tabularasa/
    - Extension lifecycle management (install, toolbar click)
    - Stays asleep otherwise: the manager page listens to tab, window and
      group events itself
-   - Session storage operations
-   - Message passing between components
 
 3. **Storage System**:
    - Local storage for session data

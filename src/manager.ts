@@ -87,6 +87,9 @@ class TabManager {
     // How many tab titles a confirmation lists before summarising the rest.
     private static readonly CONFIRM_LIST_LIMIT = 10;
 
+    private static readonly UI_STATE_KEY = 'tabularasa-ui-state';
+    private static readonly VIEWS: ViewType[] = ['windows', 'groups', 'domains'];
+
     private static readonly FALLBACK_FAVICON =
         'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
 
@@ -136,7 +139,13 @@ class TabManager {
     };
 
     constructor() {
-        this.init();
+        this.init().catch(error => {
+            // Without this a failure during startup is an unhandled
+            // rejection behind a blank page or an endless spinner.
+            console.error('Error starting Tabularasa:', error);
+            this.showLoading(false);
+            this.showStatusMessage('Tabularasa could not start. Reload this tab to try again.', 'error');
+        });
     }
 
     private async init(): Promise<void> {
@@ -145,6 +154,7 @@ class TabManager {
         // is in flight is missed.
         this.setupBrowserListeners();
         this.setupStorageListener();
+        this.restoreUiState();
         await this.loadInitialData();
         this.render();
         this.renderSessions();
@@ -951,6 +961,7 @@ class TabManager {
         this.searchTimer = setTimeout(() => {
             this.searchTimer = null;
             this.searchQuery = this.elements.searchInput.value.trim();
+            this.saveUiState();
             this.render();
         }, TabManager.SEARCH_DELAY_MS);
     }
@@ -962,18 +973,60 @@ class TabManager {
         }
         this.elements.searchInput.value = '';
         this.searchQuery = '';
+        this.saveUiState();
         this.render();
     }
 
     private handleFilterChange(): void {
         this.filterType = this.elements.filterType.value as 'all' | 'active' | 'pinned' | 'audible' | 'grouped';
+        this.saveUiState();
         this.render();
     }
 
     private toggleView(): void {
-        const order: ViewType[] = ['windows', 'groups', 'domains'];
+        const order = TabManager.VIEWS;
         this.currentView = order[(order.indexOf(this.currentView) + 1) % order.length];
+        this.saveUiState();
         this.render();
+    }
+
+    /**
+     * View, filter and search are kept in sessionStorage, which lives as
+     * long as the tab: they survive a reload and the tab being discarded by
+     * Memory Saver, but a newly opened manager starts clean. Storage can be
+     * unavailable, and its content is validated, so neither can break startup.
+     */
+    private saveUiState(): void {
+        try {
+            sessionStorage.setItem(TabManager.UI_STATE_KEY, JSON.stringify({
+                view: this.currentView,
+                filter: this.filterType,
+                search: this.searchQuery
+            }));
+        } catch (error) {
+            console.warn('Could not save the view state:', error);
+        }
+    }
+
+    private restoreUiState(): void {
+        try {
+            const state = JSON.parse(sessionStorage.getItem(TabManager.UI_STATE_KEY) || '{}');
+            if (TabManager.VIEWS.includes(state.view)) {
+                this.currentView = state.view;
+            }
+            const filterOption = Array.from(this.elements.filterType.options)
+                .find(option => option.value === state.filter);
+            if (filterOption) {
+                this.filterType = filterOption.value as typeof this.filterType;
+                this.elements.filterType.value = filterOption.value;
+            }
+            if (typeof state.search === 'string') {
+                this.searchQuery = state.search;
+                this.elements.searchInput.value = state.search;
+            }
+        } catch (error) {
+            console.warn('Could not restore the view state:', error);
+        }
     }
 
     private updateViewToggle(): void {
