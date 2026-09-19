@@ -118,7 +118,29 @@ class TabManager {
         this.setupMessageListener();
     }
 
+    /**
+     * Makes an unpacked build recognisable, so it is never mistaken for the
+     * installed Web Store copy when both are present: a badge in the header
+     * and a prefix on the tab title. Chrome adds update_url to the manifest
+     * of anything installed from the store; a build loaded from disk has
+     * none. This needs no permission, unlike chrome.management.
+     */
+    private markDevelopmentBuild(): void {
+        const manifest = chrome.runtime.getManifest();
+        if ('update_url' in manifest) {return;}
+
+        const badge = document.getElementById('dev-badge');
+        if (badge) {
+            badge.textContent = `DEV v${manifest.version}`;
+            badge.title = 'Unpacked development build, not the Chrome Web Store version';
+            badge.classList.remove('hidden');
+        }
+        document.title = `[DEV] ${document.title}`;
+    }
+
     private setupEventListeners(): void {
+        this.markDevelopmentBuild();
+
         // Search functionality
         this.elements.searchInput.addEventListener('input', () => this.handleSearch());
         document.getElementById('clear-search')?.addEventListener('click', () => this.clearSearch());

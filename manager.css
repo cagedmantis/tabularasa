@@ -47,6 +47,17 @@ body {
     margin: 0;
 }
 
+/* Shown only for an unpacked (development) build */
+.dev-badge {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: #ffc107;
+    color: #212529;
+}
+
 .tab-count {
     font-size: 14px;
     opacity: 0.9;

@@ -226,6 +226,33 @@ describe('TabManager', () => {
         });
     });
 
+    describe('development build indicator', () => {
+        const badge = () => document.getElementById('dev-badge');
+
+        afterEach(() => {
+            document.title = '';
+        });
+
+        test('a Web Store install shows no badge and keeps its title', async () => {
+            document.title = 'Tabularasa - Tab Manager';
+            await createManager();
+
+            expect(badge().classList.contains('hidden')).toBe(true);
+            expect(document.title).toBe('Tabularasa - Tab Manager');
+        });
+
+        test('an unpacked build shows a DEV badge with its version and marks the tab title', async () => {
+            // Chrome adds update_url only to store installs
+            chrome.runtime.getManifest.mockReturnValueOnce({ version: '1.0.1' });
+            document.title = 'Tabularasa - Tab Manager';
+            await createManager();
+
+            expect(badge().classList.contains('hidden')).toBe(false);
+            expect(badge().textContent).toBe('DEV v1.0.1');
+            expect(document.title).toBe('[DEV] Tabularasa - Tab Manager');
+        });
+    });
+
     describe('selection', () => {
         test('selecting a tab enables bulk actions and updates counts', async () => {
             const manager = await createManager({

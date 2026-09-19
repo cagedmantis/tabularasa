@@ -69,6 +69,7 @@ global.chrome = {
     },
     runtime: {
         getURL: jest.fn((path) => `chrome-extension://test-extension-id/${path}`),
+        getManifest: jest.fn(() => ({ version: '1.2.3', update_url: 'https://clients2.google.com/service/update2/crx' })),
         onInstalled: {
             addListener: jest.fn()
         },
