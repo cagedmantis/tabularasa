@@ -35,62 +35,10 @@ chrome.action.onClicked.addListener(async () => {
   }
 });
 
-/**
- * Notify open manager tabs of a browser event so they refresh.
- *
- * The message is sent unconditionally: the service worker is stopped and
- * restarted by Chrome at any time, so any in-memory record of open manager
- * tabs would be lost. When no manager is listening the send simply rejects,
- * which is ignored.
- */
-function notifyManager(message: Record<string, unknown>): void {
-  chrome.runtime.sendMessage(message).catch(() => {
-    // No manager tab open, ignore
-  });
-}
-
-chrome.windows.onRemoved.addListener((windowId) => {
-  notifyManager({ type: 'WINDOW_REMOVED', windowId });
-});
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  notifyManager({ type: 'TAB_UPDATED', tabId, changeInfo, tab });
-});
-
-chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
-  notifyManager({ type: 'TAB_REMOVED', tabId, removeInfo });
-});
-
-chrome.tabs.onCreated.addListener((tab) => {
-  notifyManager({ type: 'TAB_CREATED', tab });
-});
-
-// Switching tabs fires onActivated (not onUpdated), so it needs its own
-// listener for the manager's active-tab highlight to stay current.
-chrome.tabs.onActivated.addListener((activeInfo) => {
-  notifyManager({ type: 'TAB_ACTIVATED', activeInfo });
-});
-
-// Moving a tab within or between windows fires onMoved/onAttached.
-chrome.tabs.onMoved.addListener((tabId, moveInfo) => {
-  notifyManager({ type: 'TAB_MOVED', tabId, moveInfo });
-});
-
-chrome.tabs.onAttached.addListener((tabId, attachInfo) => {
-  notifyManager({ type: 'TAB_MOVED', tabId, attachInfo });
-});
-
-chrome.tabGroups.onCreated.addListener((group) => {
-  notifyManager({ type: 'GROUP_CREATED', group });
-});
-
-chrome.tabGroups.onUpdated.addListener((group) => {
-  notifyManager({ type: 'GROUP_UPDATED', group });
-});
-
-chrome.tabGroups.onRemoved.addListener((group) => {
-  notifyManager({ type: 'GROUP_REMOVED', group });
-});
+// Tab, window and group events are deliberately not listened to here. The
+// manager page subscribes to them itself; listeners in this file would wake
+// the service worker for every tab event in the browser, even with no
+// manager open.
 
 // Handle messages from manager window
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

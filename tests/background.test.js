@@ -10,10 +10,14 @@ require('../src/background.ts');
 
 const onInstalled = chrome.runtime.onInstalled.addListener.mock.calls[0][0];
 const onActionClicked = chrome.action.onClicked.addListener.mock.calls[0][0];
-const onTabCreated = chrome.tabs.onCreated.addListener.mock.calls[0][0];
-const onTabRemoved = chrome.tabs.onRemoved.addListener.mock.calls[0][0];
-const onTabUpdated = chrome.tabs.onUpdated.addListener.mock.calls[0][0];
-const onTabActivated = chrome.tabs.onActivated.addListener.mock.calls[0][0];
+// Counted here for the same reason: how many browser-event listeners the
+// worker registered while loading.
+const browserEventListeners = [
+    ...Object.values(chrome.tabs),
+    ...Object.values(chrome.tabGroups),
+    ...Object.values(chrome.windows)
+].filter(member => member && member.addListener)
+    .reduce((count, event) => count + event.addListener.mock.calls.length, 0);
 const onMessage = chrome.runtime.onMessage.addListener.mock.calls[0][0];
 
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -23,45 +27,12 @@ beforeEach(() => {
 });
 
 describe('background service worker', () => {
-    describe('event forwarding to the manager', () => {
-        test('forwards tab removal without requiring prior manager registration', () => {
-            // Regression: forwarding used to depend on an in-memory set of
-            // manager tab ids, which is lost whenever the service worker is
-            // restarted, silently breaking live updates.
-            onTabRemoved(5, { windowId: 1, isWindowClosing: false });
-
-            expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
-                type: 'TAB_REMOVED',
-                tabId: 5,
-                removeInfo: { windowId: 1, isWindowClosing: false }
-            });
-        });
-
-        test('forwards tab creation, update, and activation events', () => {
-            const tab = createMockTab({ id: 7 });
-
-            onTabCreated(tab);
-            onTabUpdated(7, { status: 'complete' }, tab);
-            onTabActivated({ tabId: 7, windowId: 1 });
-
-            expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'TAB_CREATED', tab });
-            expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
-                type: 'TAB_UPDATED',
-                tabId: 7,
-                changeInfo: { status: 'complete' },
-                tab
-            });
-            expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
-                type: 'TAB_ACTIVATED',
-                activeInfo: { tabId: 7, windowId: 1 }
-            });
-        });
-
-        test('ignores send failures when no manager tab is open', async () => {
-            chrome.runtime.sendMessage.mockRejectedValue(new Error('no receiver'));
-
-            expect(() => onTabRemoved(5, {})).not.toThrow();
-            await flush(); // would fail the test on an unhandled rejection
+    describe('browser events', () => {
+        test('the worker listens to no tab, window or group events', () => {
+            // The manager page subscribes to these itself. A listener here
+            // would wake the service worker for every tab event in the
+            // browser, even with no manager open.
+            expect(browserEventListeners).toBe(0);
         });
     });
 

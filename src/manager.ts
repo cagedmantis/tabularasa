@@ -80,6 +80,9 @@ class TabManager {
     // and is skipped both when saving and when restoring.
     private static readonly RESTORABLE_PROTOCOLS = new Set(['http:', 'https:', 'file:']);
 
+    // Browser events are coalesced into at most one refresh per this window.
+    private static readonly REFRESH_DELAY_MS = 150;
+
     private static readonly FALLBACK_FAVICON =
         'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
 
@@ -93,6 +96,16 @@ class TabManager {
     private filterType: 'all' | 'active' | 'pinned' | 'audible' | 'grouped' = 'all';
     private loading: boolean = false;
     private statusMessageTimer: ReturnType<typeof setTimeout> | null = null;
+    // Every load takes the next generation number, and a snapshot is
+    // committed only if it is newer than the last one committed. Loads that
+    // finish out of order therefore cannot put an older snapshot on screen,
+    // while a load whose successor fails still gets to commit.
+    private refreshGeneration: number = 0;
+    private committedGeneration: number = 0;
+    private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    // Set when a browser event arrives while this page is hidden; the
+    // refresh it calls for happens when the page is shown again.
+    private refreshPending: boolean = false;
     private statusMessageDuration: number = TabManager.STATUS_DURATION_MS;
     private restoringSession: boolean = false;
     // Id of the tab hosting this page. It is listed like any other tab but is
@@ -122,9 +135,11 @@ class TabManager {
 
     private async init(): Promise<void> {
         this.setupEventListeners();
+        // Subscribe before the first load so nothing that happens while it
+        // is in flight is missed.
+        this.setupBrowserListeners();
         await this.loadInitialData();
         this.render();
-        this.setupMessageListener();
     }
 
     private setupEventListeners(): void {
@@ -177,22 +192,76 @@ class TabManager {
         document.addEventListener('keydown', (e) => this.handleKeyboardShortcuts(e));
     }
 
-    private setupMessageListener(): void {
-        chrome.runtime.onMessage.addListener((message) => {
-            switch (message.type) {
-                case 'TAB_UPDATED':
-                case 'TAB_CREATED':
-                case 'TAB_REMOVED':
-                case 'TAB_ACTIVATED':
-                case 'TAB_MOVED':
-                case 'WINDOW_REMOVED':
-                case 'GROUP_CREATED':
-                case 'GROUP_UPDATED':
-                case 'GROUP_REMOVED':
-                    this.refreshTabs();
-                    break;
+    /**
+     * This page has full access to the Chrome APIs, so it listens for tab,
+     * window and group changes itself rather than having the service worker
+     * relay them, which would wake the worker for every tab event in the
+     * browser whether or not a manager is open.
+     */
+    private setupBrowserListeners(): void {
+        const events: { addListener(callback: () => void): void }[] = [
+            chrome.tabs.onCreated,
+            chrome.tabs.onUpdated,
+            chrome.tabs.onRemoved,
+            chrome.tabs.onActivated,
+            chrome.tabs.onMoved,
+            chrome.tabs.onAttached,
+            chrome.tabs.onDetached,
+            chrome.windows.onCreated,
+            chrome.windows.onRemoved,
+            chrome.tabGroups.onCreated,
+            chrome.tabGroups.onUpdated,
+            chrome.tabGroups.onMoved,
+            chrome.tabGroups.onRemoved
+        ];
+        events.forEach(event => event.addListener(() => this.scheduleRefresh()));
+
+        // Chrome can swap a tab for another (prerendered pages), giving it a
+        // new id. Carry the selection over before refreshing.
+        chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+            if (this.selectedTabs.delete(removedTabId)) {
+                this.selectedTabs.add(addedTabId);
+            }
+            this.scheduleRefresh();
+        });
+
+        // Keeps the "(current)" label right. Chrome also fires this with
+        // WINDOW_ID_NONE whenever the user switches to another application,
+        // which changes nothing worth a refresh.
+        chrome.windows.onFocusChanged.addListener(windowId => {
+            if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+                this.scheduleRefresh();
             }
         });
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && this.refreshPending) {
+                // Refresh at once rather than after the coalescing delay:
+                // the list on screen is stale and already clickable.
+                this.refreshPending = false;
+                this.refreshTabs().catch(error => console.error('Error refreshing tabs:', error));
+            }
+        });
+    }
+
+    /**
+     * Requests a refresh in response to a browser event. One page load
+     * fires several events and a bulk close fires one per tab, so requests
+     * are coalesced; while this page is hidden they are only remembered.
+     */
+    private scheduleRefresh(): void {
+        if (document.hidden) {
+            this.refreshPending = true;
+            return;
+        }
+        this.refreshPending = false;
+        // Not reset by later events, so a steady stream cannot starve it.
+        if (this.refreshTimer !== null) {return;}
+
+        this.refreshTimer = setTimeout(() => {
+            this.refreshTimer = null;
+            this.refreshTabs().catch(error => console.error('Error refreshing tabs:', error));
+        }, TabManager.REFRESH_DELAY_MS);
     }
 
     private async loadInitialData(): Promise<void> {
@@ -200,8 +269,7 @@ class TabManager {
         try {
             await Promise.all([
                 this.loadOwnTabId(),
-                this.loadTabs(),
-                this.loadTabGroups(),
+                this.loadBrowserState(),
                 this.loadSessions()
             ]);
         } catch (error) {
@@ -225,75 +293,77 @@ class TabManager {
         return tabId === this.ownTabId;
     }
 
-    private async loadTabs(): Promise<void> {
+    /**
+     * Fetches tabs, windows and groups and commits them together, so the
+     * three always describe the same moment. Returns false, committing
+     * nothing, when a newer snapshot has already been committed.
+     */
+    private async loadBrowserState(): Promise<boolean> {
+        const generation = ++this.refreshGeneration;
+        let allTabs: chrome.tabs.Tab[];
+        let allWindows: chrome.windows.Window[];
+        let tabGroups: TabGroupInfo[];
         try {
-            const [allTabs, allWindows] = await Promise.all([
+            [allTabs, allWindows, tabGroups] = await Promise.all([
                 chrome.tabs.query({}),
-                chrome.windows.getAll({ populate: true })
+                chrome.windows.getAll({ populate: true }),
+                this.queryTabGroups()
             ]);
-            // The manifest sets "incognito": "not_allowed", so Chrome never
-            // reports incognito tabs. Filter anyway so that a manifest change
-            // cannot silently start listing (and saving) private browsing.
-            const tabs = allTabs.filter(tab => !tab.incognito);
-            const windows = allWindows.filter(window => !window.incognito);
-
-            this.tabs = tabs.map(tab => ({
-                id: tab.id!,
-                title: tab.title || '',
-                url: tab.url || '',
-                favIconUrl: tab.favIconUrl,
-                active: tab.active,
-                pinned: tab.pinned,
-                windowId: tab.windowId,
-                groupId: tab.groupId,
-                mutedInfo: tab.mutedInfo,
-                audible: tab.audible,
-                lastAccessed: tab.lastAccessed,
-                index: tab.index
-            }));
-            
-            this.windows = windows.map(window => ({
-                id: window.id!,
-                focused: window.focused,
-                type: window.type!,
-                tabs: (window.tabs || []).map(tab => ({
-                    id: tab.id!,
-                    title: tab.title || '',
-                    url: tab.url || '',
-                    favIconUrl: tab.favIconUrl,
-                    active: tab.active,
-                    pinned: tab.pinned,
-                    windowId: tab.windowId,
-                    groupId: tab.groupId,
-                    mutedInfo: tab.mutedInfo,
-                    audible: tab.audible,
-                    lastAccessed: tab.lastAccessed,
-                    index: tab.index
-                }))
-            }));
-
-            // Drop selections for tabs that no longer exist (closed outside
-            // the manager), otherwise bulk operations fail on stale ids.
-            const existingIds = new Set(this.tabs.map(tab => tab.id));
-            this.selectedTabs.forEach(id => {
-                if (!existingIds.has(id)) {
-                    this.selectedTabs.delete(id);
-                }
-            });
         } catch (error) {
             console.error('Error loading tabs:', error);
             throw error;
         }
+        if (generation < this.committedGeneration) {return false;}
+        this.committedGeneration = generation;
+
+        // The manifest sets "incognito": "not_allowed", so Chrome never
+        // reports incognito tabs. Filter anyway so that a manifest change
+        // cannot silently start listing (and saving) private browsing.
+        const tabs = allTabs.filter(tab => !tab.incognito);
+        const windows = allWindows.filter(window => !window.incognito);
+
+        const toTabInfo = (tab: chrome.tabs.Tab): TabInfo => ({
+            id: tab.id!,
+            title: tab.title || '',
+            url: tab.url || '',
+            favIconUrl: tab.favIconUrl,
+            active: tab.active,
+            pinned: tab.pinned,
+            windowId: tab.windowId,
+            groupId: tab.groupId,
+            mutedInfo: tab.mutedInfo,
+            audible: tab.audible,
+            lastAccessed: tab.lastAccessed,
+            index: tab.index
+        });
+
+        this.tabs = tabs.map(toTabInfo);
+        this.windows = windows.map(window => ({
+            id: window.id!,
+            focused: window.focused,
+            type: window.type!,
+            tabs: (window.tabs || []).map(toTabInfo)
+        }));
+        this.tabGroups = tabGroups;
+
+        // Drop selections for tabs that no longer exist (closed outside
+        // the manager), otherwise bulk operations fail on stale ids.
+        const existingIds = new Set(this.tabs.map(tab => tab.id));
+        this.selectedTabs.forEach(id => {
+            if (!existingIds.has(id)) {
+                this.selectedTabs.delete(id);
+            }
+        });
+        return true;
     }
 
-    private async loadTabGroups(): Promise<void> {
+    private async queryTabGroups(): Promise<TabGroupInfo[]> {
         try {
-            const groups = await chrome.tabGroups.query({});
-            this.tabGroups = groups;
+            return await chrome.tabGroups.query({});
         } catch (error) {
             console.error('Error loading tab groups:', error);
             // Tab groups might not be available in all Chrome versions
-            this.tabGroups = [];
+            return [];
         }
     }
 
@@ -308,9 +378,9 @@ class TabManager {
     }
 
     private async refreshTabs(): Promise<void> {
-        await this.loadTabs();
-        await this.loadTabGroups();
-        this.render();
+        if (await this.loadBrowserState()) {
+            this.render();
+        }
     }
 
     private render(): void {
