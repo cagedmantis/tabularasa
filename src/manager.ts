@@ -97,14 +97,20 @@ class TabManager {
     private filterType: 'all' | 'active' | 'pinned' | 'audible' | 'grouped' = 'all';
     private loading: boolean = false;
     private statusMessageTimer: ReturnType<typeof setTimeout> | null = null;
-    // Incremented by every refresh so that one overtaken by a newer refresh
-    // can tell its snapshot is stale and drop it.
     private searchTimer: ReturnType<typeof setTimeout> | null = null;
     // Rendered rows by tab id, with a signature of the data they show. A
     // row whose signature is unchanged is reused instead of rebuilt, which
     // also spares its favicon from being fetched and decoded again.
     private tabRows: Map<number, { signature: string; element: HTMLElement }> = new Map();
+    // Signature of everything the list last rendered. Most browser events
+    // change nothing that is shown; when it matches, the list is left alone.
+    private renderedListSignature: string | null = null;
+    // Every load takes the next generation number, and a snapshot is
+    // committed only if it is newer than the last one committed. Loads that
+    // finish out of order therefore cannot put an older snapshot on screen,
+    // while a load whose successor fails still gets to commit.
     private refreshGeneration: number = 0;
+    private committedGeneration: number = 0;
     private refreshTimer: ReturnType<typeof setTimeout> | null = null;
     // Set when a browser event arrives while this page is hidden; the
     // refresh it calls for happens when the page is shown again.
@@ -213,7 +219,6 @@ class TabManager {
             chrome.tabs.onDetached,
             chrome.windows.onCreated,
             chrome.windows.onRemoved,
-            chrome.windows.onFocusChanged,
             chrome.tabGroups.onCreated,
             chrome.tabGroups.onUpdated,
             chrome.tabGroups.onMoved,
@@ -230,9 +235,21 @@ class TabManager {
             this.scheduleRefresh();
         });
 
+        // Keeps the "(current)" label right. Chrome also fires this with
+        // WINDOW_ID_NONE whenever the user switches to another application,
+        // which changes nothing worth a refresh.
+        chrome.windows.onFocusChanged.addListener(windowId => {
+            if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+                this.scheduleRefresh();
+            }
+        });
+
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && this.refreshPending) {
-                this.scheduleRefresh();
+                // Refresh at once rather than after the coalescing delay:
+                // the list on screen is stale and already clickable.
+                this.refreshPending = false;
+                this.refreshTabs().catch(error => console.error('Error refreshing tabs:', error));
             }
         });
     }
@@ -289,7 +306,7 @@ class TabManager {
     /**
      * Fetches tabs, windows and groups and commits them together, so the
      * three always describe the same moment. Returns false, committing
-     * nothing, when a newer load started while this one was in flight.
+     * nothing, when a newer snapshot has already been committed.
      */
     private async loadBrowserState(): Promise<boolean> {
         const generation = ++this.refreshGeneration;
@@ -308,7 +325,8 @@ class TabManager {
             console.error('Error loading tabs:', error);
             throw error;
         }
-        if (generation !== this.refreshGeneration) {return false;}
+        if (generation < this.committedGeneration) {return false;}
+        this.committedGeneration = generation;
 
         // The manifest sets "incognito": "not_allowed", so Chrome never
         // reports incognito tabs. Filter anyway so that a manifest change
@@ -391,15 +409,31 @@ class TabManager {
     }
 
     private renderTabs(): void {
-        const filteredTabs = this.getFilteredTabs();
+        const buckets = this.buildBuckets(this.getFilteredTabs());
+
+        // Leave the DOM alone when nothing shown has changed: a rebuild
+        // blurs and refocuses the focused control, which a screen reader
+        // announces again every time.
+        const listSignature = JSON.stringify(buckets.map(bucket => [
+            bucket.label,
+            bucket.chromeGroup?.color,
+            bucket.chromeGroup?.collapsed,
+            bucket.tabs.map(tab => [tab.id, this.rowSignature(tab)])
+        ]));
+        if (listSignature === this.renderedListSignature) {
+            this.renderSelection();
+            return;
+        }
+        this.renderedListSignature = listSignature;
+
         const restoreFocus = this.captureFocus();
 
         this.elements.tabsContainer.innerHTML = '';
 
-        if (filteredTabs.length === 0) {
+        if (buckets.length === 0) {
             this.renderEmptyState();
         } else {
-            this.buildBuckets(filteredTabs).forEach(bucket => {
+            buckets.forEach(bucket => {
                 this.elements.tabsContainer.appendChild(this.createTabGroup(bucket));
             });
         }
@@ -432,15 +466,28 @@ class TabManager {
         return () => {
             const newRow = this.elements.tabsContainer.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
             const control = newRow?.querySelectorAll<HTMLElement>('input, button')[controlIndex];
-            control?.focus();
+            // The row is gone when its tab was closed or filtered out; keep
+            // focus in the list rather than letting it fall to the body.
+            (control ?? this.elements.tabsContainer).focus();
         };
     }
 
-    private getTabRow(tab: TabInfo): HTMLElement {
-        const signature = JSON.stringify([
-            tab.title, tab.url, tab.active, tab.pinned, tab.audible,
+    /**
+     * Everything a row shows. favIconUrl is not rendered itself (the image
+     * comes from chrome's _favicon cache, keyed by page URL), but it is what
+     * changes when a page's icon becomes known: Chrome reports url, then
+     * title, then favIconUrl, so without it a row built at the title change
+     * would keep the placeholder icon for good.
+     */
+    private rowSignature(tab: TabInfo): string {
+        return JSON.stringify([
+            tab.title, tab.url, tab.favIconUrl, tab.active, tab.pinned, tab.audible,
             tab.mutedInfo?.muted ?? false, this.isOwnTab(tab.id)
         ]);
+    }
+
+    private getTabRow(tab: TabInfo): HTMLElement {
+        const signature = this.rowSignature(tab);
         let row = this.tabRows.get(tab.id);
         if (!row || row.signature !== signature) {
             row = { signature, element: this.createTabElement(tab) };
@@ -901,13 +948,15 @@ class TabManager {
 
     // Event handlers
     private handleSearch(): void {
-        // Rebuild once typing pauses rather than on every keystroke.
+        // The query takes effect at once, so Select All and the "hidden by
+        // filter" checks never act on an older query than the box shows;
+        // only the rebuild waits for typing to pause.
+        this.searchQuery = this.elements.searchInput.value.trim();
         if (this.searchTimer !== null) {
             clearTimeout(this.searchTimer);
         }
         this.searchTimer = setTimeout(() => {
             this.searchTimer = null;
-            this.searchQuery = this.elements.searchInput.value.trim();
             this.render();
         }, TabManager.SEARCH_DELAY_MS);
     }
