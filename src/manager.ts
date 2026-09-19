@@ -96,9 +96,12 @@ class TabManager {
     private filterType: 'all' | 'active' | 'pinned' | 'audible' | 'grouped' = 'all';
     private loading: boolean = false;
     private statusMessageTimer: ReturnType<typeof setTimeout> | null = null;
-    // Incremented by every refresh so that one overtaken by a newer refresh
-    // can tell its snapshot is stale and drop it.
+    // Every load takes the next generation number, and a snapshot is
+    // committed only if it is newer than the last one committed. Loads that
+    // finish out of order therefore cannot put an older snapshot on screen,
+    // while a load whose successor fails still gets to commit.
     private refreshGeneration: number = 0;
+    private committedGeneration: number = 0;
     private refreshTimer: ReturnType<typeof setTimeout> | null = null;
     // Set when a browser event arrives while this page is hidden; the
     // refresh it calls for happens when the page is shown again.
@@ -206,7 +209,6 @@ class TabManager {
             chrome.tabs.onDetached,
             chrome.windows.onCreated,
             chrome.windows.onRemoved,
-            chrome.windows.onFocusChanged,
             chrome.tabGroups.onCreated,
             chrome.tabGroups.onUpdated,
             chrome.tabGroups.onMoved,
@@ -223,9 +225,21 @@ class TabManager {
             this.scheduleRefresh();
         });
 
+        // Keeps the "(current)" label right. Chrome also fires this with
+        // WINDOW_ID_NONE whenever the user switches to another application,
+        // which changes nothing worth a refresh.
+        chrome.windows.onFocusChanged.addListener(windowId => {
+            if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+                this.scheduleRefresh();
+            }
+        });
+
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && this.refreshPending) {
-                this.scheduleRefresh();
+                // Refresh at once rather than after the coalescing delay:
+                // the list on screen is stale and already clickable.
+                this.refreshPending = false;
+                this.refreshTabs().catch(error => console.error('Error refreshing tabs:', error));
             }
         });
     }
@@ -282,7 +296,7 @@ class TabManager {
     /**
      * Fetches tabs, windows and groups and commits them together, so the
      * three always describe the same moment. Returns false, committing
-     * nothing, when a newer load started while this one was in flight.
+     * nothing, when a newer snapshot has already been committed.
      */
     private async loadBrowserState(): Promise<boolean> {
         const generation = ++this.refreshGeneration;
@@ -299,7 +313,8 @@ class TabManager {
             console.error('Error loading tabs:', error);
             throw error;
         }
-        if (generation !== this.refreshGeneration) {return false;}
+        if (generation < this.committedGeneration) {return false;}
+        this.committedGeneration = generation;
 
         // The manifest sets "incognito": "not_allowed", so Chrome never
         // reports incognito tabs. Filter anyway so that a manifest change

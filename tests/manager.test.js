@@ -254,10 +254,73 @@ describe('TabManager', () => {
             await wait(REFRESH_DELAY_MS + 50);
             expect(chrome.tabs.query).not.toHaveBeenCalled();
 
+            // Shown again: refreshed at once, not after the coalescing delay
             setHidden(false);
-            await wait(REFRESH_DELAY_MS + 50);
+            await flush();
             expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
             expect(document.querySelectorAll('.tab-item')).toHaveLength(0);
+        });
+
+        test('a refresh already scheduled when the page is hidden still runs, once', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+            chrome.tabs.query.mockClear();
+
+            fire(chrome.tabs.onUpdated, 1, {});
+            setHidden(true);
+            await wait(REFRESH_DELAY_MS + 50);
+
+            // The pending refresh still runs once; nothing further is scheduled
+            expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
+        });
+
+        test('switching to another application does not cause a refresh', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+            chrome.tabs.query.mockClear();
+
+            fire(chrome.windows.onFocusChanged, chrome.windows.WINDOW_ID_NONE);
+            await wait(REFRESH_DELAY_MS + 50);
+            expect(chrome.tabs.query).not.toHaveBeenCalled();
+
+            fire(chrome.windows.onFocusChanged, 2);
+            await wait(REFRESH_DELAY_MS + 50);
+            expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
+        });
+
+        test('a load still commits when the newer load that overtook it fails', async () => {
+            const manager = await createManager({ tabs: [createMockTab({ id: 1 })] });
+
+            let resolveSlow;
+            chrome.tabs.query
+                .mockReturnValueOnce(new Promise(resolve => { resolveSlow = resolve; }))
+                .mockRejectedValueOnce(new Error('query failed'));
+
+            const slow = manager.refreshTabs();
+            await expect(manager.refreshTabs()).rejects.toThrow('query failed');
+
+            resolveSlow([createMockTab({ id: 1 }), createMockTab({ id: 2 })]);
+            await slow;
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(2);
+        });
+
+        test('an event during the initial load does not blank the first render', async () => {
+            document.body.innerHTML = bodyHtml;
+            chrome.tabs.getCurrent.mockResolvedValue(undefined);
+            chrome.windows.getAll.mockResolvedValue([]);
+            chrome.tabGroups.query.mockResolvedValue([]);
+            chrome.storage.local.get.mockResolvedValue({ sessions: [] });
+            let resolveInitial;
+            chrome.tabs.query
+                .mockReturnValueOnce(new Promise(resolve => { resolveInitial = resolve; }))
+                .mockReturnValueOnce(new Promise(() => {})); // the event's refresh is slower still
+            new TabManager();
+
+            fire(chrome.tabs.onUpdated, 1, { status: 'loading' });
+            await wait(REFRESH_DELAY_MS + 50);             // event refresh now in flight
+            resolveInitial([createMockTab({ id: 1 })]);
+            await flush();
+
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(1);
+            expect(document.querySelector('#tabs-container .empty-state')).toBeNull();
         });
 
         test('becoming visible with nothing pending does not refresh', async () => {
