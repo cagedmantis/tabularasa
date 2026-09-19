@@ -79,6 +79,10 @@ class TabManager {
     private filterType: 'all' | 'active' | 'pinned' | 'audible' | 'grouped' = 'all';
     private loading: boolean = false;
     private statusMessageTimer: ReturnType<typeof setTimeout> | null = null;
+    // Id of the tab hosting this page. It is listed like any other tab but is
+    // kept out of selections and bulk closes: removing it destroys this page
+    // and abandons whatever operation is in flight.
+    private ownTabId: number | null = null;
 
     // DOM elements
     private elements = {
@@ -171,6 +175,7 @@ class TabManager {
         this.showLoading(true);
         try {
             await Promise.all([
+                this.loadOwnTabId(),
                 this.loadTabs(),
                 this.loadTabGroups(),
                 this.loadSessions()
@@ -181,6 +186,19 @@ class TabManager {
         } finally {
             this.showLoading(false);
         }
+    }
+
+    private async loadOwnTabId(): Promise<void> {
+        try {
+            const ownTab = await chrome.tabs.getCurrent();
+            this.ownTabId = ownTab?.id ?? null;
+        } catch (error) {
+            console.error('Error resolving the manager tab:', error);
+        }
+    }
+
+    private isOwnTab(tabId: number): boolean {
+        return tabId === this.ownTabId;
     }
 
     private async loadTabs(): Promise<void> {
@@ -486,7 +504,7 @@ class TabManager {
         const closeAllBtn = document.createElement('button');
         closeAllBtn.className = 'btn btn-small btn-danger';
         closeAllBtn.textContent = 'Close All';
-        closeAllBtn.addEventListener('click', () => this.closeTabGroupOptimized(groupKey, tabs));
+        closeAllBtn.addEventListener('click', () => this.closeTabGroup(groupKey, tabs));
         actions.appendChild(closeAllBtn);
         
         header.appendChild(actions);
@@ -511,6 +529,11 @@ class TabManager {
         checkbox.type = 'checkbox';
         checkbox.className = 'tab-checkbox';
         checkbox.checked = this.selectedTabs.has(tab.id);
+        checkbox.setAttribute('aria-label', `Select ${tab.title}`);
+        if (this.isOwnTab(tab.id)) {
+            checkbox.disabled = true;
+            checkbox.setAttribute('aria-label', 'This tab (Tabularasa) cannot be selected');
+        }
         tabElement.appendChild(checkbox);
 
         // Create favicon
@@ -540,6 +563,14 @@ class TabManager {
         url.textContent = this.truncateUrl(tab.url);
         
         content.appendChild(title);
+        if (this.isOwnTab(tab.id)) {
+            // Visible explanation for the disabled checkbox and for bulk
+            // actions skipping this row.
+            const ownBadge = document.createElement('span');
+            ownBadge.className = 'tab-own-badge';
+            ownBadge.textContent = 'This tab';
+            content.appendChild(ownBadge);
+        }
         content.appendChild(separator);
         content.appendChild(url);
         tabElement.appendChild(content);
@@ -763,6 +794,9 @@ class TabManager {
     }
 
     private toggleTabSelection(tabId: number): void {
+        if (this.isOwnTab(tabId)) {
+            return;
+        }
         if (this.selectedTabs.has(tabId)) {
             this.selectedTabs.delete(tabId);
         } else {
@@ -773,8 +807,16 @@ class TabManager {
 
     private selectAllTabs(): void {
         const filteredTabs = this.getFilteredTabs();
-        filteredTabs.forEach(tab => this.selectedTabs.add(tab.id));
+        this.selectTabs(filteredTabs);
         this.render();
+    }
+
+    private selectTabs(tabs: TabInfo[]): void {
+        tabs.forEach(tab => {
+            if (!this.isOwnTab(tab.id)) {
+                this.selectedTabs.add(tab.id);
+            }
+        });
     }
 
     private deselectAllTabs(): void {
@@ -853,38 +895,35 @@ class TabManager {
         }
     }
 
-    private async closeTabGroupOptimized(groupKey: string, tabs: TabInfo[]): Promise<void> {
+    private async closeTabGroup(groupKey: string, tabs: TabInfo[]): Promise<void> {
+        const tabIds = tabs.filter(tab => !this.isOwnTab(tab.id)).map(tab => tab.id);
+        if (tabIds.length === 0) {
+            this.showStatusMessage(`No tabs to close in ${groupKey}`);
+            return;
+        }
+
         try {
-            if (tabs.length > 0) {
-                // Remove tabs from selection to avoid re-rendering issues
-                tabs.forEach(tab => this.selectedTabs.delete(tab.id));
-                
-                // Close tabs in batches to improve performance
-                const batchSize = 10;
-                const tabIds = tabs.map(tab => tab.id);
-                
-                for (let i = 0; i < tabIds.length; i += batchSize) {
-                    const batch = tabIds.slice(i, i + batchSize);
-                    await chrome.tabs.remove(batch);
-                    
-                    // Small delay to prevent overwhelming the Chrome API
-                    if (i + batchSize < tabIds.length) {
-                        await new Promise(resolve => setTimeout(resolve, 50));
-                    }
-                }
-                
-                this.showStatusMessage(`${tabIds.length} tabs closed from ${groupKey}`);
-                // Refresh the view immediately after closing
-                await this.refreshTabs();
-            }
+            await chrome.tabs.remove(tabIds);
+            tabIds.forEach(tabId => this.selectedTabs.delete(tabId));
+            this.showStatusMessage(`${tabIds.length} tabs closed from ${groupKey}`);
         } catch (error) {
+            // A stale id rejects the call after some of the tabs have
+            // already been closed, so this may be a partial close.
             console.error('Error closing tab group:', error);
-            this.showStatusMessage('Error closing tab group', 'error');
+            this.showStatusMessage(`Some tabs in ${groupKey} could not be closed`, 'warning');
+        }
+
+        // Refresh on failure too, so the list shows what actually closed.
+        try {
+            await this.refreshTabs();
+        } catch (error) {
+            console.error('Error refreshing tabs:', error);
+            this.showStatusMessage('Error refreshing tabs', 'error');
         }
     }
 
     private selectAllTabsInGroup(tabs: TabInfo[]): void {
-        tabs.forEach(tab => this.selectedTabs.add(tab.id));
+        this.selectTabs(tabs);
         this.updateGlobalActions();
         this.updateTabCount();
         this.render();
@@ -966,7 +1005,8 @@ class TabManager {
             urlGroups.forEach(tabGroup => {
                 if (tabGroup.length > 1) {
                     tabGroup.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-                    tabsToClose.push(...tabGroup.slice(1).map(tab => tab.id));
+                    const keep = tabGroup.find(tab => this.isOwnTab(tab.id)) ?? tabGroup[0];
+                    tabsToClose.push(...tabGroup.filter(tab => tab !== keep).map(tab => tab.id));
                 }
             });
 

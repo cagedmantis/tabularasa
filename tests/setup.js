@@ -11,6 +11,7 @@ global.chrome = {
     tabs: {
         query: jest.fn(),
         get: jest.fn(),
+        getCurrent: jest.fn(),
         update: jest.fn(),
         remove: jest.fn(),
         create: jest.fn(),
