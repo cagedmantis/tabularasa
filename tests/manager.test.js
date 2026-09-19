@@ -685,6 +685,7 @@ describe('TabManager', () => {
             await createManager();
 
             expect(badge().classList.contains('hidden')).toBe(true);
+            expect(badge().textContent).toBe('');
             expect(document.title).toBe('Tabularasa - Tab Manager');
         });
 
@@ -696,7 +697,36 @@ describe('TabManager', () => {
 
             expect(badge().classList.contains('hidden')).toBe(false);
             expect(badge().textContent).toBe('DEV v1.0.1');
+            expect(badge().getAttribute('aria-label')).toBe('Development build, version 1.0.1');
             expect(document.title).toBe('[DEV] Tabularasa - Tab Manager');
+        });
+
+        test('the title is marked once, however often a manager starts', async () => {
+            chrome.runtime.getManifest.mockReturnValue({ version: '1.0.1' });
+            document.title = 'Tabularasa - Tab Manager';
+            try {
+                await createManager();
+                await createManager();
+            } finally {
+                // Back to the store-install default from tests/setup.js
+                chrome.runtime.getManifest.mockReturnValue({
+                    version: '1.2.3',
+                    update_url: 'https://clients2.google.com/service/update2/crx'
+                });
+            }
+
+            expect(document.title).toBe('[DEV] Tabularasa - Tab Manager');
+        });
+
+        test('failing to read the manifest does not stop the manager from starting', async () => {
+            chrome.runtime.getManifest.mockImplementationOnce(() => {
+                throw new Error('Extension context invalidated');
+            });
+
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(1);
+            expect(badge().classList.contains('hidden')).toBe(true);
         });
     });
 
