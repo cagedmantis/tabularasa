@@ -1450,6 +1450,100 @@ describe('TabManager', () => {
         });
     });
 
+    describe('session storage', () => {
+        const stored = (id, name) => createMockSession({ id, name, windows: [] });
+        const useCurrentWindow = () => chrome.windows.getCurrent.mockResolvedValue(createMockWindow({
+            id: 1,
+            tabs: [createMockTab({ id: 1, url: 'https://a.com/' })]
+        }));
+        const sessionNames = () =>
+            Array.from(document.querySelectorAll('.session-name')).map(el => el.textContent);
+
+        test('saving keeps sessions another manager page stored in the meantime', async () => {
+            const manager = await createManager({ sessions: [stored('1', 'Mine')] });
+            useCurrentWindow();
+            // Another page saved "Theirs" after this one loaded
+            chrome.storage.local.get.mockResolvedValue({ sessions: [stored('1', 'Mine'), stored('2', 'Theirs')] });
+            document.getElementById('session-name').value = 'New';
+
+            await manager.saveSession();
+
+            const written = chrome.storage.local.set.mock.calls[0][0].sessions;
+            expect(written.map(session => session.name)).toEqual(['Mine', 'Theirs', 'New']);
+            expect(sessionNames()).toEqual(['Mine', 'Theirs', 'New']);
+        });
+
+        test('deleting does not undo what another manager page did', async () => {
+            const manager = await createManager({ sessions: [stored('1', 'Mine'), stored('2', 'Old')] });
+            // Another page deleted "Old" and saved "Theirs"
+            chrome.storage.local.get.mockResolvedValue({ sessions: [stored('1', 'Mine'), stored('3', 'Theirs')] });
+
+            await manager.deleteSession('1');
+
+            const written = chrome.storage.local.set.mock.calls[0][0].sessions;
+            expect(written.map(session => session.name)).toEqual(['Theirs']);
+            expect(sessionNames()).toEqual(['Theirs']);
+        });
+
+        test('a failed write leaves the list showing what is really stored', async () => {
+            const manager = await createManager({ sessions: [stored('1', 'Mine')] });
+            chrome.storage.local.set.mockRejectedValue(new Error('disk error'));
+
+            await manager.deleteSession('1');
+
+            expect(sessionNames()).toEqual(['Mine']);
+            expect(manager.sessions).toHaveLength(1);
+            expect(document.getElementById('status-message').classList.contains('error')).toBe(true);
+        });
+
+        test('running out of storage is reported in plain words', async () => {
+            const manager = await createManager();
+            useCurrentWindow();
+            chrome.storage.local.set.mockRejectedValue(new Error('QUOTA_BYTES quota exceeded'));
+            document.getElementById('session-name').value = 'Big';
+
+            await manager.saveSession();
+
+            expect(document.getElementById('status-message').textContent).toContain('Storage is full');
+            expect(sessionNames()).toEqual([]);
+        });
+
+        test('changes made by another manager page show up without a reload', async () => {
+            await createManager({ sessions: [stored('1', 'Mine')] });
+            const [onChanged] = chrome.storage.onChanged.addListener.mock.calls[0];
+
+            onChanged({ sessions: { newValue: [stored('1', 'Mine'), stored('2', 'Theirs')] } }, 'local');
+            expect(sessionNames()).toEqual(['Mine', 'Theirs']);
+
+            onChanged({ sessions: {} }, 'local'); // key removed
+            expect(sessionNames()).toEqual([]);
+        });
+
+        test('unrelated storage changes are ignored', async () => {
+            await createManager({ sessions: [stored('1', 'Mine')] });
+            const [onChanged] = chrome.storage.onChanged.addListener.mock.calls[0];
+
+            onChanged({ sessions: { newValue: [] } }, 'sync');
+            onChanged({ other: { newValue: 1 } }, 'local');
+
+            expect(sessionNames()).toEqual(['Mine']);
+        });
+
+        test('writes are serialized across pages with a Web Lock when available', async () => {
+            const manager = await createManager({ sessions: [stored('1', 'Mine')] });
+            const request = jest.fn(async (name, callback) => callback());
+            Object.defineProperty(navigator, 'locks', { configurable: true, value: { request } });
+            try {
+                await manager.deleteSession('1');
+            } finally {
+                delete navigator.locks;
+            }
+
+            expect(request).toHaveBeenCalledWith('tabularasa-sessions', expect.any(Function));
+            expect(chrome.storage.local.set).toHaveBeenCalledWith({ sessions: [] });
+        });
+    });
+
     describe('status messages', () => {
         test('a new message resets the auto-hide timer of the previous one', async () => {
             const manager = await createManager();

@@ -75,6 +75,9 @@ global.chrome = {
         }
     },
     storage: {
+        onChanged: {
+            addListener: jest.fn()
+        },
         local: {
             get: jest.fn(),
             set: jest.fn(),
