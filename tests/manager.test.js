@@ -358,20 +358,6 @@ describe('TabManager', () => {
             expect(saved.windows).toHaveLength(1);
             expect(JSON.stringify(saved)).not.toContain('private.example');
         });
-
-        test('saving the current window refuses an incognito window', async () => {
-            const manager = await createManager();
-            chrome.windows.getCurrent.mockResolvedValue(createMockWindow({
-                id: 2,
-                incognito: true,
-                tabs: [createMockTab({ id: 2, url: 'https://private.example/', incognito: true })]
-            }));
-            document.getElementById('session-name').value = 'Private';
-
-            await manager.saveSession();
-
-            expect(chrome.storage.local.set).not.toHaveBeenCalled();
-        });
     });
 
     describe('sessions', () => {

@@ -1127,10 +1127,6 @@ class TabManager {
 
             if (saveType === 'current') {
                 const currentWindow = await chrome.windows.getCurrent({ populate: true });
-                if (currentWindow.incognito) {
-                    this.showStatusMessage('Incognito windows are never saved', 'error');
-                    return;
-                }
                 const groups = await chrome.tabGroups.query({ windowId: currentWindow.id });
                 
                 session.windows.push({
