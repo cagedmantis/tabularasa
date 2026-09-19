@@ -317,8 +317,35 @@ describe('TabManager', () => {
             document.querySelector('.tab-group-actions .btn-danger').click();
             await flush();
 
+            expect(chrome.tabs.remove).toHaveBeenCalledTimes(1);
             expect(document.querySelectorAll('.tab-item')).toHaveLength(0);
+            expect(document.getElementById('status-message').classList.contains('warning')).toBe(true);
+        });
+
+        test('Close All reports a failed refresh instead of rejecting', async () => {
+            await createManager({
+                tabs: [createMockTab({ id: 1 })],
+                windows: [createMockWindow({ id: 1, focused: true })]
+            });
+            chrome.tabs.query.mockRejectedValue(new Error('query failed'));
+
+            document.querySelector('.tab-group-actions .btn-danger').click();
+            await flush();
+
             expect(document.getElementById('status-message').classList.contains('error')).toBe(true);
+        });
+
+        test('Close All still closes everything in one call when the own tab is unknown', async () => {
+            await createManager({
+                tabs: manyTabs(),
+                windows: [createMockWindow({ id: 1, focused: true })]
+            });
+
+            document.querySelector('.tab-group-actions .btn-danger').click();
+            await flush();
+
+            expect(chrome.tabs.remove).toHaveBeenCalledTimes(1);
+            expect(chrome.tabs.remove.mock.calls[0][0]).toHaveLength(25);
         });
 
         test('cannot be selected, individually or via select all', async () => {
@@ -328,7 +355,11 @@ describe('TabManager', () => {
                 ownTabId: 3
             });
 
-            expect(document.querySelector('[data-tab-id="3"] .tab-checkbox').disabled).toBe(true);
+            const ownRow = document.querySelector('[data-tab-id="3"]');
+            expect(ownRow.querySelector('.tab-checkbox').disabled).toBe(true);
+            expect(ownRow.querySelector('.tab-checkbox').getAttribute('aria-label')).toMatch(/cannot be selected/);
+            expect(ownRow.querySelector('.tab-own-badge').textContent).toBe('This tab');
+            expect(document.querySelectorAll('.tab-own-badge')).toHaveLength(1);
             expect(document.querySelector('[data-tab-id="1"] .tab-checkbox').disabled).toBe(false);
 
             manager.toggleTabSelection(3);

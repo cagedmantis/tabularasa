@@ -106,7 +106,6 @@ class TabManager {
 
     private async init(): Promise<void> {
         this.setupEventListeners();
-        await this.loadOwnTabId();
         await this.loadInitialData();
         this.render();
         this.setupMessageListener();
@@ -176,6 +175,7 @@ class TabManager {
         this.showLoading(true);
         try {
             await Promise.all([
+                this.loadOwnTabId(),
                 this.loadTabs(),
                 this.loadTabGroups(),
                 this.loadSessions()
@@ -524,9 +524,10 @@ class TabManager {
         checkbox.type = 'checkbox';
         checkbox.className = 'tab-checkbox';
         checkbox.checked = this.selectedTabs.has(tab.id);
+        checkbox.setAttribute('aria-label', `Select ${tab.title}`);
         if (this.isOwnTab(tab.id)) {
             checkbox.disabled = true;
-            checkbox.title = 'Tabularasa itself cannot be selected';
+            checkbox.setAttribute('aria-label', 'This tab (Tabularasa) cannot be selected');
         }
         tabElement.appendChild(checkbox);
 
@@ -557,6 +558,14 @@ class TabManager {
         url.textContent = this.truncateUrl(tab.url);
         
         content.appendChild(title);
+        if (this.isOwnTab(tab.id)) {
+            // Visible explanation for the disabled checkbox and for bulk
+            // actions skipping this row.
+            const ownBadge = document.createElement('span');
+            ownBadge.className = 'tab-own-badge';
+            ownBadge.textContent = 'This tab';
+            content.appendChild(ownBadge);
+        }
         content.appendChild(separator);
         content.appendChild(url);
         tabElement.appendChild(content);
@@ -888,12 +897,19 @@ class TabManager {
             tabIds.forEach(tabId => this.selectedTabs.delete(tabId));
             this.showStatusMessage(`${tabIds.length} tabs closed from ${groupKey}`);
         } catch (error) {
+            // A stale id rejects the call after some of the tabs have
+            // already been closed, so this may be a partial close.
             console.error('Error closing tab group:', error);
-            this.showStatusMessage('Error closing tab group', 'error');
+            this.showStatusMessage(`Some tabs in ${groupKey} could not be closed`, 'warning');
         }
-        // Refresh even on failure: a stale id rejects the call after some of
-        // the tabs have already been closed.
-        await this.refreshTabs();
+
+        // Refresh on failure too, so the list shows what actually closed.
+        try {
+            await this.refreshTabs();
+        } catch (error) {
+            console.error('Error refreshing tabs:', error);
+            this.showStatusMessage('Error refreshing tabs', 'error');
+        }
     }
 
     private selectAllTabsInGroup(tabs: TabInfo[]): void {

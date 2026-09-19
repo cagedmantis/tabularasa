@@ -329,6 +329,17 @@ body {
     max-width: 300px;
 }
 
+.tab-own-badge {
+    flex-shrink: 0;
+    margin-left: 8px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #e9ecef;
+    color: #495057;
+    font-size: 11px;
+    font-weight: 600;
+}
+
 .tab-separator {
     color: #9ca3af;
     margin: 0 6px;
