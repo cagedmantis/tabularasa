@@ -387,20 +387,20 @@ class TabManager {
      * a failed write leaves the list showing what is really stored.
      */
     private async updateStoredSessions(update: (sessions: SessionInfo[]) => SessionInfo[]): Promise<void> {
-        const readModifyWrite = async (): Promise<void> => {
-            const stored = await chrome.storage.local.get(['sessions']);
-            const sessions = update(stored.sessions || []);
-            await chrome.storage.local.set({ sessions });
-            this.sessions = sessions;
-        };
-
         // Manager pages share an origin, so a Web Lock serializes the
         // read-modify-write across all of them.
-        if (navigator.locks) {
-            await navigator.locks.request('tabularasa-sessions', readModifyWrite);
-        } else {
-            await readModifyWrite();
-        }
+        await navigator.locks.request('tabularasa-sessions', async () => {
+            const stored = await chrome.storage.local.get(['sessions']);
+            const sessions = update(this.asSessions(stored.sessions));
+            await chrome.storage.local.set({ sessions });
+            this.sessions = sessions;
+        });
+    }
+
+    // Anything but an array under the storage key is treated as no sessions,
+    // so damaged storage cannot make every load and save throw.
+    private asSessions(stored: unknown): SessionInfo[] {
+        return Array.isArray(stored) ? stored : [];
     }
 
     private isQuotaError(error: unknown): boolean {
@@ -411,7 +411,7 @@ class TabManager {
     private setupStorageListener(): void {
         chrome.storage.onChanged.addListener((changes, areaName) => {
             if (areaName === 'local' && changes.sessions) {
-                this.sessions = changes.sessions.newValue || [];
+                this.sessions = this.asSessions(changes.sessions.newValue);
                 this.renderSessions();
             }
         });
@@ -420,7 +420,7 @@ class TabManager {
     private async loadSessions(): Promise<void> {
         try {
             const result = await chrome.storage.local.get(['sessions']);
-            this.sessions = result.sessions || [];
+            this.sessions = this.asSessions(result.sessions);
         } catch (error) {
             console.error('Error loading sessions:', error);
             throw error;

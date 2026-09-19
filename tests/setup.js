@@ -104,6 +104,20 @@ global.chrome = {
     }
 };
 
+// jsdom has no Web Locks API. This fake really serializes callbacks per lock
+// name, like the real one, so tests exercise the same path as Chrome.
+const lockQueues = new Map();
+Object.defineProperty(global.navigator, 'locks', {
+    configurable: true,
+    value: {
+        request: jest.fn((name, callback) => {
+            const run = (lockQueues.get(name) || Promise.resolve()).then(() => callback());
+            lockQueues.set(name, run.catch(() => {}));
+            return run;
+        })
+    }
+});
+
 // Silence console output from the code under test
 global.console = {
     log: jest.fn(),

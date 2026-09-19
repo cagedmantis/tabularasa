@@ -1662,18 +1662,53 @@ describe('TabManager', () => {
             expect(sessionNames()).toEqual(['Mine']);
         });
 
-        test('writes are serialized across pages with a Web Lock when available', async () => {
-            const manager = await createManager({ sessions: [stored('1', 'Mine')] });
-            const request = jest.fn(async (name, callback) => callback());
-            Object.defineProperty(navigator, 'locks', { configurable: true, value: { request } });
-            try {
-                await manager.deleteSession('1');
-            } finally {
-                delete navigator.locks;
-            }
+        test('two pages saving at the same moment both keep their session', async () => {
+            // Backed by a real value, so an unserialized read-modify-write
+            // would lose one of the two writes.
+            let storedSessions = [];
+            const useRealisticStorage = () => {
+                chrome.storage.local.get.mockImplementation(async () => {
+                    await flush();
+                    return { sessions: storedSessions };
+                });
+                chrome.storage.local.set.mockImplementation(async ({ sessions }) => {
+                    await flush();
+                    storedSessions = sessions;
+                });
+            };
+            const pageOne = await createManager();
+            useRealisticStorage();
+            const pageTwo = new TabManager();
+            await flush();
+            useCurrentWindow();
 
-            expect(request).toHaveBeenCalledWith('tabularasa-sessions', expect.any(Function));
-            expect(chrome.storage.local.set).toHaveBeenCalledWith({ sessions: [] });
+            document.getElementById('session-name').value = 'Both';
+            await Promise.all([pageOne.saveSession(), pageTwo.saveSession()]);
+
+            expect(storedSessions).toHaveLength(2);
+            expect(navigator.locks.request).toHaveBeenCalledWith('tabularasa-sessions', expect.any(Function));
+        });
+
+        test('a failure inside the lock releases it for the next write', async () => {
+            const manager = await createManager({ sessions: [stored('1', 'Mine'), stored('2', 'Other')] });
+            chrome.storage.local.set.mockRejectedValueOnce(new Error('disk error'));
+
+            await manager.deleteSession('1');
+            await manager.deleteSession('2');
+
+            expect(chrome.storage.local.set).toHaveBeenLastCalledWith({ sessions: [stored('1', 'Mine')] });
+        });
+
+        test('a damaged sessions value in storage is treated as no sessions', async () => {
+            const manager = await createManager({ sessions: 'not an array' });
+            expect(sessionNames()).toEqual([]);
+
+            useCurrentWindow();
+            document.getElementById('session-name').value = 'Fresh';
+            await manager.saveSession();
+
+            const written = chrome.storage.local.set.mock.calls[0][0].sessions;
+            expect(written.map(session => session.name)).toEqual(['Fresh']);
         });
     });
 
