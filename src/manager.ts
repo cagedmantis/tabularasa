@@ -100,14 +100,20 @@ class TabManager {
     private filterType: 'all' | 'active' | 'pinned' | 'audible' | 'grouped' = 'all';
     private loading: boolean = false;
     private statusMessageTimer: ReturnType<typeof setTimeout> | null = null;
-    // Incremented by every refresh so that one overtaken by a newer refresh
-    // can tell its snapshot is stale and drop it.
     private searchTimer: ReturnType<typeof setTimeout> | null = null;
     // Rendered rows by tab id, with a signature of the data they show. A
     // row whose signature is unchanged is reused instead of rebuilt, which
     // also spares its favicon from being fetched and decoded again.
     private tabRows: Map<number, { signature: string; element: HTMLElement }> = new Map();
+    // Signature of everything the list last rendered. Most browser events
+    // change nothing that is shown; when it matches, the list is left alone.
+    private renderedListSignature: string | null = null;
+    // Every load takes the next generation number, and a snapshot is
+    // committed only if it is newer than the last one committed. Loads that
+    // finish out of order therefore cannot put an older snapshot on screen,
+    // while a load whose successor fails still gets to commit.
     private refreshGeneration: number = 0;
+    private committedGeneration: number = 0;
     private refreshTimer: ReturnType<typeof setTimeout> | null = null;
     // Set when a browser event arrives while this page is hidden; the
     // refresh it calls for happens when the page is shown again.
@@ -217,7 +223,6 @@ class TabManager {
             chrome.tabs.onDetached,
             chrome.windows.onCreated,
             chrome.windows.onRemoved,
-            chrome.windows.onFocusChanged,
             chrome.tabGroups.onCreated,
             chrome.tabGroups.onUpdated,
             chrome.tabGroups.onMoved,
@@ -234,9 +239,21 @@ class TabManager {
             this.scheduleRefresh();
         });
 
+        // Keeps the "(current)" label right. Chrome also fires this with
+        // WINDOW_ID_NONE whenever the user switches to another application,
+        // which changes nothing worth a refresh.
+        chrome.windows.onFocusChanged.addListener(windowId => {
+            if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+                this.scheduleRefresh();
+            }
+        });
+
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && this.refreshPending) {
-                this.scheduleRefresh();
+                // Refresh at once rather than after the coalescing delay:
+                // the list on screen is stale and already clickable.
+                this.refreshPending = false;
+                this.refreshTabs().catch(error => console.error('Error refreshing tabs:', error));
             }
         });
     }
@@ -293,7 +310,7 @@ class TabManager {
     /**
      * Fetches tabs, windows and groups and commits them together, so the
      * three always describe the same moment. Returns false, committing
-     * nothing, when a newer load started while this one was in flight.
+     * nothing, when a newer snapshot has already been committed.
      */
     private async loadBrowserState(): Promise<boolean> {
         const generation = ++this.refreshGeneration;
@@ -305,14 +322,17 @@ class TabManager {
                 chrome.tabs.query({}),
                 // Window metadata only: tabs.query already returns every tab,
                 // so populating the windows would transfer them all twice.
-                chrome.windows.getAll(),
+                // Every type is asked for: the default leaves out app and
+                // devtools windows, whose tabs tabs.query still returns.
+                chrome.windows.getAll({ windowTypes: ['normal', 'popup', 'panel', 'app', 'devtools'] }),
                 this.queryTabGroups()
             ]);
         } catch (error) {
             console.error('Error loading tabs:', error);
             throw error;
         }
-        if (generation !== this.refreshGeneration) {return false;}
+        if (generation < this.committedGeneration) {return false;}
+        this.committedGeneration = generation;
 
         // The manifest sets "incognito": "not_allowed", so Chrome never
         // reports incognito tabs. Filter anyway so that a manifest change
@@ -373,20 +393,20 @@ class TabManager {
      * a failed write leaves the list showing what is really stored.
      */
     private async updateStoredSessions(update: (sessions: SessionInfo[]) => SessionInfo[]): Promise<void> {
-        const readModifyWrite = async (): Promise<void> => {
-            const stored = await chrome.storage.local.get(['sessions']);
-            const sessions = update(stored.sessions || []);
-            await chrome.storage.local.set({ sessions });
-            this.sessions = sessions;
-        };
-
         // Manager pages share an origin, so a Web Lock serializes the
         // read-modify-write across all of them.
-        if (navigator.locks) {
-            await navigator.locks.request('tabularasa-sessions', readModifyWrite);
-        } else {
-            await readModifyWrite();
-        }
+        await navigator.locks.request('tabularasa-sessions', async () => {
+            const stored = await chrome.storage.local.get(['sessions']);
+            const sessions = update(this.asSessions(stored.sessions));
+            await chrome.storage.local.set({ sessions });
+            this.sessions = sessions;
+        });
+    }
+
+    // Anything but an array under the storage key is treated as no sessions,
+    // so damaged storage cannot make every load and save throw.
+    private asSessions(stored: unknown): SessionInfo[] {
+        return Array.isArray(stored) ? stored : [];
     }
 
     private isQuotaError(error: unknown): boolean {
@@ -397,7 +417,7 @@ class TabManager {
     private setupStorageListener(): void {
         chrome.storage.onChanged.addListener((changes, areaName) => {
             if (areaName === 'local' && changes.sessions) {
-                this.sessions = changes.sessions.newValue || [];
+                this.sessions = this.asSessions(changes.sessions.newValue);
                 this.renderSessions();
             }
         });
@@ -406,7 +426,7 @@ class TabManager {
     private async loadSessions(): Promise<void> {
         try {
             const result = await chrome.storage.local.get(['sessions']);
-            this.sessions = result.sessions || [];
+            this.sessions = this.asSessions(result.sessions);
         } catch (error) {
             console.error('Error loading sessions:', error);
             throw error;
@@ -434,15 +454,31 @@ class TabManager {
     }
 
     private renderTabs(): void {
-        const filteredTabs = this.getFilteredTabs();
+        const buckets = this.buildBuckets(this.getFilteredTabs());
+
+        // Leave the DOM alone when nothing shown has changed: a rebuild
+        // blurs and refocuses the focused control, which a screen reader
+        // announces again every time.
+        const listSignature = JSON.stringify(buckets.map(bucket => [
+            bucket.label,
+            bucket.chromeGroup?.color,
+            bucket.chromeGroup?.collapsed,
+            bucket.tabs.map(tab => [tab.id, this.rowSignature(tab)])
+        ]));
+        if (listSignature === this.renderedListSignature) {
+            this.renderSelection();
+            return;
+        }
+        this.renderedListSignature = listSignature;
+
         const restoreFocus = this.captureFocus();
 
         this.elements.tabsContainer.innerHTML = '';
 
-        if (filteredTabs.length === 0) {
+        if (buckets.length === 0) {
             this.renderEmptyState();
         } else {
-            this.buildBuckets(filteredTabs).forEach(bucket => {
+            buckets.forEach(bucket => {
                 this.elements.tabsContainer.appendChild(this.createTabGroup(bucket));
             });
         }
@@ -475,15 +511,28 @@ class TabManager {
         return () => {
             const newRow = this.elements.tabsContainer.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
             const control = newRow?.querySelectorAll<HTMLElement>('input, button')[controlIndex];
-            control?.focus();
+            // The row is gone when its tab was closed or filtered out; keep
+            // focus in the list rather than letting it fall to the body.
+            (control ?? this.elements.tabsContainer).focus();
         };
     }
 
-    private getTabRow(tab: TabInfo): HTMLElement {
-        const signature = JSON.stringify([
-            tab.title, tab.url, tab.active, tab.pinned, tab.audible,
+    /**
+     * Everything a row shows. favIconUrl is not rendered itself (the image
+     * comes from chrome's _favicon cache, keyed by page URL), but it is what
+     * changes when a page's icon becomes known: Chrome reports url, then
+     * title, then favIconUrl, so without it a row built at the title change
+     * would keep the placeholder icon for good.
+     */
+    private rowSignature(tab: TabInfo): string {
+        return JSON.stringify([
+            tab.title, tab.url, tab.favIconUrl, tab.active, tab.pinned, tab.audible,
             tab.mutedInfo?.muted ?? false, this.isOwnTab(tab.id)
         ]);
+    }
+
+    private getTabRow(tab: TabInfo): HTMLElement {
+        const signature = this.rowSignature(tab);
         let row = this.tabRows.get(tab.id);
         if (!row || row.signature !== signature) {
             row = { signature, element: this.createTabElement(tab) };
@@ -944,13 +993,15 @@ class TabManager {
 
     // Event handlers
     private handleSearch(): void {
-        // Rebuild once typing pauses rather than on every keystroke.
+        // The query takes effect at once, so Select All and the "hidden by
+        // filter" checks never act on an older query than the box shows;
+        // only the rebuild waits for typing to pause.
+        this.searchQuery = this.elements.searchInput.value.trim();
         if (this.searchTimer !== null) {
             clearTimeout(this.searchTimer);
         }
         this.searchTimer = setTimeout(() => {
             this.searchTimer = null;
-            this.searchQuery = this.elements.searchInput.value.trim();
             this.render();
         }, TabManager.SEARCH_DELAY_MS);
     }
@@ -1168,11 +1219,7 @@ class TabManager {
             this.showStatusMessage(`${reopened} of ${this.plural(closedTabs.length, 'tab')} reopened`, 'warning');
         }
 
-        try {
-            await this.refreshTabs();
-        } catch (error) {
-            console.error('Error refreshing tabs:', error);
-        }
+        await this.refreshSafely();
     }
 
     // Tab operations
@@ -1293,8 +1340,9 @@ class TabManager {
         }
     }
 
-    // Selected tabs in tab-strip order, so bulk operations keep the order
-    // the user sees rather than the order the boxes were ticked in.
+    // Selected tabs ordered by window, then position in the tab strip, so
+    // bulk operations keep each window's left-to-right order rather than
+    // the order the boxes were ticked in.
     private getSelectedTabs(): TabInfo[] {
         return this.tabs
             .filter(tab => this.selectedTabs.has(tab.id))
@@ -1302,7 +1350,9 @@ class TabManager {
     }
 
     // Tabs of popup, app and devtools windows cannot be grouped or moved.
-    // A window not seen yet is assumed normal; Chrome rejects it otherwise.
+    // this.windows holds windows of every type, so a window missing from it
+    // is one that opened since the last refresh; assume normal and let
+    // Chrome reject it otherwise.
     private isInNormalWindow(tab: TabInfo): boolean {
         const window = this.windows.find(w => w.id === tab.windowId);
         return (window?.type ?? 'normal') === 'normal';
@@ -1346,8 +1396,9 @@ class TabManager {
             }
             await this.refreshTabs();
         } catch (error) {
+            // The new window may already exist with some of the tabs in it.
             console.error('Error moving tabs to new window:', error);
-            this.showStatusMessage('Error moving tabs to new window', 'error');
+            this.showStatusMessage('Not every tab could be moved to the new window', 'error');
             await this.refreshSafely();
         }
     }
@@ -1485,18 +1536,26 @@ class TabManager {
         });
 
         let groupsCreated = 0;
-        let tabsGrouped = 0;
+        const groupedTabIds: number[] = [];
         for (const [windowId, tabIds] of byWindow) {
+            let groupId: number;
             try {
-                const groupId = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
+                groupId = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
+            } catch (error) {
+                console.error(`Error creating tab group in window ${windowId}:`, error);
+                continue;
+            }
+            groupsCreated++;
+            groupedTabIds.push(...tabIds);
+
+            try {
                 await chrome.tabGroups.update(groupId, {
                     title: groupName || undefined,
                     color: groupColor
                 });
-                groupsCreated++;
-                tabsGrouped += tabIds.length;
             } catch (error) {
-                console.error(`Error creating tab group in window ${windowId}:`, error);
+                // The tabs are grouped all the same, only unnamed.
+                console.warn(`Could not name the tab group in window ${windowId}:`, error);
             }
         }
 
@@ -1506,17 +1565,24 @@ class TabManager {
             return;
         }
 
-        this.selectedTabs.clear();
+        // Keep what was not grouped selected, so it can be retried or
+        // handled another way.
+        groupedTabIds.forEach(tabId => this.selectedTabs.delete(tabId));
         this.hideGroupModal();
+
         const name = groupName || 'Untitled';
-        let message = groupsCreated === 1
-            ? `Created group ${name} with ${this.plural(tabsGrouped, 'tab')}`
-            : `Created ${groupsCreated} groups named ${name} (one per window) with ${this.plural(tabsGrouped, 'tab')}`;
-        const notGrouped = leftOut + (groupable.length - tabsGrouped);
-        if (notGrouped > 0) {
-            message += `; ${this.plural(notGrouped, 'tab')} could not be grouped`;
+        const notes: string[] = [];
+        if (leftOut > 0) {
+            notes.push(`${this.plural(leftOut, 'pinned or app-window tab')} left out`);
         }
-        this.showStatusMessage(message, notGrouped > 0 ? 'warning' : 'success');
+        const failed = groupable.length - groupedTabIds.length;
+        if (failed > 0) {
+            notes.push(`${this.plural(failed, 'tab')} could not be grouped`);
+        }
+        const created = groupsCreated === 1
+            ? `Created group ${name} with ${this.plural(groupedTabIds.length, 'tab')}`
+            : `Created ${groupsCreated} groups named ${name} (one per window) with ${this.plural(groupedTabIds.length, 'tab')}`;
+        this.showStatusMessage([created, ...notes].join('; '), notes.length > 0 ? 'warning' : 'success');
         await this.refreshSafely();
     }
 

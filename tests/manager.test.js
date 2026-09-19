@@ -260,10 +260,73 @@ describe('TabManager', () => {
             await wait(REFRESH_DELAY_MS + 50);
             expect(chrome.tabs.query).not.toHaveBeenCalled();
 
+            // Shown again: refreshed at once, not after the coalescing delay
             setHidden(false);
-            await wait(REFRESH_DELAY_MS + 50);
+            await flush();
             expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
             expect(document.querySelectorAll('.tab-item')).toHaveLength(0);
+        });
+
+        test('a refresh already scheduled when the page is hidden still runs, once', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+            chrome.tabs.query.mockClear();
+
+            fire(chrome.tabs.onUpdated, 1, {});
+            setHidden(true);
+            await wait(REFRESH_DELAY_MS + 50);
+
+            // The pending refresh still runs once; nothing further is scheduled
+            expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
+        });
+
+        test('switching to another application does not cause a refresh', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+            chrome.tabs.query.mockClear();
+
+            fire(chrome.windows.onFocusChanged, chrome.windows.WINDOW_ID_NONE);
+            await wait(REFRESH_DELAY_MS + 50);
+            expect(chrome.tabs.query).not.toHaveBeenCalled();
+
+            fire(chrome.windows.onFocusChanged, 2);
+            await wait(REFRESH_DELAY_MS + 50);
+            expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
+        });
+
+        test('a load still commits when the newer load that overtook it fails', async () => {
+            const manager = await createManager({ tabs: [createMockTab({ id: 1 })] });
+
+            let resolveSlow;
+            chrome.tabs.query
+                .mockReturnValueOnce(new Promise(resolve => { resolveSlow = resolve; }))
+                .mockRejectedValueOnce(new Error('query failed'));
+
+            const slow = manager.refreshTabs();
+            await expect(manager.refreshTabs()).rejects.toThrow('query failed');
+
+            resolveSlow([createMockTab({ id: 1 }), createMockTab({ id: 2 })]);
+            await slow;
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(2);
+        });
+
+        test('an event during the initial load does not blank the first render', async () => {
+            document.body.innerHTML = bodyHtml;
+            chrome.tabs.getCurrent.mockResolvedValue(undefined);
+            chrome.windows.getAll.mockResolvedValue([]);
+            chrome.tabGroups.query.mockResolvedValue([]);
+            chrome.storage.local.get.mockResolvedValue({ sessions: [] });
+            let resolveInitial;
+            chrome.tabs.query
+                .mockReturnValueOnce(new Promise(resolve => { resolveInitial = resolve; }))
+                .mockReturnValueOnce(new Promise(() => {})); // the event's refresh is slower still
+            new TabManager();
+
+            fire(chrome.tabs.onUpdated, 1, { status: 'loading' });
+            await wait(REFRESH_DELAY_MS + 50);             // event refresh now in flight
+            resolveInitial([createMockTab({ id: 1 })]);
+            await flush();
+
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(1);
+            expect(document.querySelector('#tabs-container .empty-state')).toBeNull();
         });
 
         test('becoming visible with nothing pending does not refresh', async () => {
@@ -342,7 +405,6 @@ describe('TabManager', () => {
             document.getElementById('deselect-all').click();
             manager.toggleTabSelection(2);
 
-            expect([row(1), row(2), row(3)]).toEqual(before);
             expect(before.every((element, i) => element === row(i + 1))).toBe(true);
             expect(row(2).classList.contains('selected')).toBe(true);
             expect(row(2).querySelector('.tab-checkbox').checked).toBe(true);
@@ -373,6 +435,77 @@ describe('TabManager', () => {
 
             expect(row(2).classList.contains('selected')).toBe(true);
             expect(row(2).querySelector('.tab-checkbox').checked).toBe(true);
+        });
+
+        test('a row is rebuilt when its favicon becomes known', async () => {
+            // Chrome reports url, then title, then favIconUrl. The _favicon
+            // URL only depends on the page URL, so without favIconUrl in the
+            // signature the row built at the title change is reused forever
+            // and keeps the placeholder icon.
+            const loading = threeTabs();
+            loading[0].favIconUrl = undefined;
+            const manager = await createManager({ tabs: loading });
+            const before = row(1);
+            const loaded = threeTabs();
+            loaded[0].favIconUrl = 'https://one.example/favicon.ico';
+            chrome.tabs.query.mockResolvedValue(loaded);
+
+            await manager.refreshTabs();
+
+            expect(row(1)).not.toBe(before);
+            expect(row(1).querySelector('.tab-favicon')).not.toBe(before.querySelector('.tab-favicon'));
+            expect(row(2).parentElement).not.toBeNull();
+        });
+
+        test('a refresh that changes nothing shown leaves the DOM and focus alone', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            const group = document.querySelector('.tab-group');
+            const closeButton = row(2).querySelector('.tab-action.close');
+            closeButton.focus();
+            const onBlur = jest.fn();
+            closeButton.addEventListener('blur', onBlur);
+            const sameButNewObjects = threeTabs();
+            sameButNewObjects[0].lastAccessed = 123456; // not shown anywhere
+            chrome.tabs.query.mockResolvedValue(sameButNewObjects);
+
+            await manager.refreshTabs();
+
+            expect(document.querySelector('.tab-group')).toBe(group);
+            expect(onBlur).not.toHaveBeenCalled();
+            expect(document.activeElement).toBe(closeButton);
+        });
+
+        test('selection still updates when the list itself is unchanged', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            manager.selectedTabs.add(3);
+
+            await manager.refreshTabs();
+
+            expect(row(3).classList.contains('selected')).toBe(true);
+            expect(document.getElementById('selected-count').textContent).toBe('1 selected');
+        });
+
+        test('when the focused row disappears, focus stays in the list', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            row(2).querySelector('.tab-action.close').focus();
+            chrome.tabs.query.mockResolvedValue([threeTabs()[0], threeTabs()[2]]);
+
+            await manager.refreshTabs();
+
+            expect(document.activeElement).toBe(document.getElementById('tabs-container'));
+        });
+
+        test('Select All right after typing uses the query in the box, not the previous one', async () => {
+            await createManager({ tabs: threeTabs() });
+            const searchInput = document.getElementById('search-input');
+            searchInput.value = 'Two';
+            searchInput.dispatchEvent(new window.Event('input'));
+
+            document.getElementById('select-all').click(); // before the debounced rebuild
+
+            expect(document.getElementById('selected-count').textContent).toBe('1 selected');
+            await wait(SEARCH_DELAY_MS + 30);
+            expect(row(2).classList.contains('selected')).toBe(true);
         });
 
         test('rows of closed tabs are forgotten', async () => {
@@ -439,7 +572,8 @@ describe('TabManager', () => {
         test('windows are fetched without their tabs', async () => {
             await createManager({ tabs: threeTabs() });
 
-            expect(chrome.windows.getAll).toHaveBeenCalledWith();
+            expect(chrome.windows.getAll).toHaveBeenCalledTimes(1);
+            expect(chrome.windows.getAll.mock.calls[0][0]).not.toHaveProperty('populate');
         });
 
         test('equal-sized sections keep a stable order', async () => {
@@ -1576,7 +1710,7 @@ describe('TabManager', () => {
 
             expect(chrome.tabs.group).toHaveBeenCalledTimes(1);
             expect(chrome.tabs.group).toHaveBeenCalledWith({ tabIds: [2], createProperties: { windowId: 1 } });
-            expect(status().textContent).toContain('2 tabs could not be grouped');
+            expect(status().textContent).toContain('Created group Untitled with 1 tab; 2 pinned or app-window tabs left out');
             expect(status().classList.contains('warning')).toBe(true);
         });
 
@@ -1600,6 +1734,57 @@ describe('TabManager', () => {
 
             expect(chrome.tabGroups.update).toHaveBeenCalledTimes(1);
             expect(status().textContent).toContain('1 tab could not be grouped');
+            // What failed stays selected so it can be retried
+            expect(Array.from(manager.selectedTabs)).toEqual([2]);
+        });
+
+        test('asks Chrome for windows of every type, so app and devtools windows are recognised', async () => {
+            const manager = await createManager({
+                tabs: [
+                    createMockTab({ id: 1, windowId: 1, index: 0 }),
+                    createMockTab({ id: 2, windowId: 7, index: 0 }),
+                    createMockTab({ id: 3, windowId: 8, index: 0 })
+                ],
+                windows: [
+                    createMockWindow({ id: 1, focused: true }),
+                    createMockWindow({ id: 7, type: 'devtools' }),
+                    createMockWindow({ id: 8, type: 'app' })
+                ]
+            });
+            // windows.getAll leaves app and devtools windows out by default
+            expect(chrome.windows.getAll.mock.calls[0][0].windowTypes)
+                .toEqual(expect.arrayContaining(['normal', 'popup', 'app', 'devtools']));
+
+            select(manager, 1, 2, 3);
+            await manager.moveToNewWindow();
+
+            expect(chrome.windows.create).toHaveBeenCalledWith({ tabId: 1 });
+            expect(chrome.tabs.move).not.toHaveBeenCalled();
+            expect(status().textContent).toContain('1 tab moved to new window; 2 tabs in popup or app windows left in place');
+        });
+
+        test('a group that is created but cannot be named still counts as grouped', async () => {
+            const manager = await mixed();
+            select(manager, 2, 3);
+            chrome.tabGroups.update.mockRejectedValue(new Error('No group with id'));
+
+            await manager.confirmGroupCreation();
+
+            expect(status().textContent).toContain('with 2 tabs');
+            expect(status().textContent).not.toContain('could not be grouped');
+            expect(manager.selectedTabs.size).toBe(0);
+        });
+
+        test('a tab in a window opened since the last refresh is attempted, not skipped', async () => {
+            const manager = await createManager({
+                tabs: [createMockTab({ id: 1, windowId: 42, index: 0 })],
+                windows: []
+            });
+            select(manager, 1);
+
+            await manager.confirmGroupCreation();
+
+            expect(chrome.tabs.group).toHaveBeenCalledWith({ tabIds: [1], createProperties: { windowId: 42 } });
         });
 
         test('when every group fails, the list is refreshed and the error shown', async () => {
@@ -1633,6 +1818,7 @@ describe('TabManager', () => {
 
             await manager.moveToNewWindow();
 
+            expect(status().textContent).toContain('Not every tab could be moved');
             expect(status().classList.contains('error')).toBe(true);
             expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
         });
@@ -1729,18 +1915,53 @@ describe('TabManager', () => {
             expect(sessionNames()).toEqual(['Mine']);
         });
 
-        test('writes are serialized across pages with a Web Lock when available', async () => {
-            const manager = await createManager({ sessions: [stored('1', 'Mine')] });
-            const request = jest.fn(async (name, callback) => callback());
-            Object.defineProperty(navigator, 'locks', { configurable: true, value: { request } });
-            try {
-                await manager.deleteSession('1');
-            } finally {
-                delete navigator.locks;
-            }
+        test('two pages saving at the same moment both keep their session', async () => {
+            // Backed by a real value, so an unserialized read-modify-write
+            // would lose one of the two writes.
+            let storedSessions = [];
+            const useRealisticStorage = () => {
+                chrome.storage.local.get.mockImplementation(async () => {
+                    await flush();
+                    return { sessions: storedSessions };
+                });
+                chrome.storage.local.set.mockImplementation(async ({ sessions }) => {
+                    await flush();
+                    storedSessions = sessions;
+                });
+            };
+            const pageOne = await createManager();
+            useRealisticStorage();
+            const pageTwo = new TabManager();
+            await flush();
+            useCurrentWindow();
 
-            expect(request).toHaveBeenCalledWith('tabularasa-sessions', expect.any(Function));
-            expect(chrome.storage.local.set).toHaveBeenCalledWith({ sessions: [] });
+            document.getElementById('session-name').value = 'Both';
+            await Promise.all([pageOne.saveSession(), pageTwo.saveSession()]);
+
+            expect(storedSessions).toHaveLength(2);
+            expect(navigator.locks.request).toHaveBeenCalledWith('tabularasa-sessions', expect.any(Function));
+        });
+
+        test('a failure inside the lock releases it for the next write', async () => {
+            const manager = await createManager({ sessions: [stored('1', 'Mine'), stored('2', 'Other')] });
+            chrome.storage.local.set.mockRejectedValueOnce(new Error('disk error'));
+
+            await manager.deleteSession('1');
+            await manager.deleteSession('2');
+
+            expect(chrome.storage.local.set).toHaveBeenLastCalledWith({ sessions: [stored('1', 'Mine')] });
+        });
+
+        test('a damaged sessions value in storage is treated as no sessions', async () => {
+            const manager = await createManager({ sessions: 'not an array' });
+            expect(sessionNames()).toEqual([]);
+
+            useCurrentWindow();
+            document.getElementById('session-name').value = 'Fresh';
+            await manager.saveSession();
+
+            const written = chrome.storage.local.set.mock.calls[0][0].sessions;
+            expect(written.map(session => session.name)).toEqual(['Fresh']);
         });
     });
 
