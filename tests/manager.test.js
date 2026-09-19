@@ -572,7 +572,8 @@ describe('TabManager', () => {
         test('windows are fetched without their tabs', async () => {
             await createManager({ tabs: threeTabs() });
 
-            expect(chrome.windows.getAll).toHaveBeenCalledWith();
+            expect(chrome.windows.getAll).toHaveBeenCalledTimes(1);
+            expect(chrome.windows.getAll.mock.calls[0][0]).not.toHaveProperty('populate');
         });
 
         test('equal-sized sections keep a stable order', async () => {
@@ -1626,7 +1627,7 @@ describe('TabManager', () => {
 
             expect(chrome.tabs.group).toHaveBeenCalledTimes(1);
             expect(chrome.tabs.group).toHaveBeenCalledWith({ tabIds: [2], createProperties: { windowId: 1 } });
-            expect(status().textContent).toContain('2 tabs could not be grouped');
+            expect(status().textContent).toContain('Created group Untitled with 1 tab; 2 pinned or app-window tabs left out');
             expect(status().classList.contains('warning')).toBe(true);
         });
 
@@ -1650,6 +1651,57 @@ describe('TabManager', () => {
 
             expect(chrome.tabGroups.update).toHaveBeenCalledTimes(1);
             expect(status().textContent).toContain('1 tab could not be grouped');
+            // What failed stays selected so it can be retried
+            expect(Array.from(manager.selectedTabs)).toEqual([2]);
+        });
+
+        test('asks Chrome for windows of every type, so app and devtools windows are recognised', async () => {
+            const manager = await createManager({
+                tabs: [
+                    createMockTab({ id: 1, windowId: 1, index: 0 }),
+                    createMockTab({ id: 2, windowId: 7, index: 0 }),
+                    createMockTab({ id: 3, windowId: 8, index: 0 })
+                ],
+                windows: [
+                    createMockWindow({ id: 1, focused: true }),
+                    createMockWindow({ id: 7, type: 'devtools' }),
+                    createMockWindow({ id: 8, type: 'app' })
+                ]
+            });
+            // windows.getAll leaves app and devtools windows out by default
+            expect(chrome.windows.getAll.mock.calls[0][0].windowTypes)
+                .toEqual(expect.arrayContaining(['normal', 'popup', 'app', 'devtools']));
+
+            select(manager, 1, 2, 3);
+            await manager.moveToNewWindow();
+
+            expect(chrome.windows.create).toHaveBeenCalledWith({ tabId: 1 });
+            expect(chrome.tabs.move).not.toHaveBeenCalled();
+            expect(status().textContent).toContain('1 tab moved to new window; 2 tabs in popup or app windows left in place');
+        });
+
+        test('a group that is created but cannot be named still counts as grouped', async () => {
+            const manager = await mixed();
+            select(manager, 2, 3);
+            chrome.tabGroups.update.mockRejectedValue(new Error('No group with id'));
+
+            await manager.confirmGroupCreation();
+
+            expect(status().textContent).toContain('with 2 tabs');
+            expect(status().textContent).not.toContain('could not be grouped');
+            expect(manager.selectedTabs.size).toBe(0);
+        });
+
+        test('a tab in a window opened since the last refresh is attempted, not skipped', async () => {
+            const manager = await createManager({
+                tabs: [createMockTab({ id: 1, windowId: 42, index: 0 })],
+                windows: []
+            });
+            select(manager, 1);
+
+            await manager.confirmGroupCreation();
+
+            expect(chrome.tabs.group).toHaveBeenCalledWith({ tabIds: [1], createProperties: { windowId: 42 } });
         });
 
         test('when every group fails, the list is refreshed and the error shown', async () => {
@@ -1683,6 +1735,7 @@ describe('TabManager', () => {
 
             await manager.moveToNewWindow();
 
+            expect(status().textContent).toContain('Not every tab could be moved');
             expect(status().classList.contains('error')).toBe(true);
             expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
         });
