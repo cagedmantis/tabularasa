@@ -474,12 +474,25 @@ class TabManager {
         // Leave the DOM alone when nothing shown has changed: a rebuild
         // blurs and refocuses the focused control, which a screen reader
         // announces again every time.
+        // Besides what is shown, this covers what the bucket buttons close
+        // over (group id; each tab's window, position and group), so a
+        // skipped rebuild can never leave them acting on outdated data.
         const listSignature = JSON.stringify(buckets.map(bucket => [
             bucket.label,
+            bucket.chromeGroup?.id,
             bucket.chromeGroup?.color,
             bucket.chromeGroup?.collapsed,
-            bucket.tabs.map(tab => [tab.id, this.rowSignature(tab)])
+            bucket.tabs.map(tab => [tab.id, tab.windowId, tab.index, tab.groupId, this.rowSignature(tab)])
         ]));
+
+        // Forget rows of tabs that no longer exist
+        const existingIds = new Set(this.tabs.map(tab => tab.id));
+        this.tabRows.forEach((_, tabId) => {
+            if (!existingIds.has(tabId)) {
+                this.tabRows.delete(tabId);
+            }
+        });
+
         if (listSignature === this.renderedListSignature) {
             this.renderSelection();
             return;
@@ -497,14 +510,6 @@ class TabManager {
                 this.elements.tabsContainer.appendChild(this.createTabGroup(bucket));
             });
         }
-
-        // Forget rows of tabs that no longer exist
-        const existingIds = new Set(this.tabs.map(tab => tab.id));
-        this.tabRows.forEach((_, tabId) => {
-            if (!existingIds.has(tabId)) {
-                this.tabRows.delete(tabId);
-            }
-        });
 
         restoreFocus();
     }
@@ -1192,12 +1197,6 @@ class TabManager {
     }
 
     /**
-     * Gate for every bulk close. Asks before a large close, or one that
-     * includes tabs the user cannot currently see; small, fully visible
-     * closes go ahead because they can be undone. Returns the tabs to close,
-     * which is empty when the user declined.
-     */
-    /**
      * A tab's title as one short, plain line for a confirm() dialog. Titles
      * come from web pages: strip control and bidirectional-override
      * characters (newlines could fake extra dialog lines, overrides could
@@ -1214,6 +1213,12 @@ class TabManager {
             : label;
     }
 
+    /**
+     * Gate for every bulk close. Asks before a large close, or one that
+     * includes tabs the user cannot currently see; small, fully visible
+     * closes go ahead because they can be undone. Returns the tabs to close,
+     * which is empty when the user declined.
+     */
     private async confirmClose(tabs: TabInfo[], options: { listTabs?: boolean } = {}): Promise<TabInfo[]> {
         const hiddenCount = this.countHidden(tabs.map(tab => tab.id));
         // listTabs is for closes where the program, not the user, picked the
