@@ -185,10 +185,15 @@ class TabManager {
 
     private async loadTabs(): Promise<void> {
         try {
-            const [tabs, windows] = await Promise.all([
+            const [allTabs, allWindows] = await Promise.all([
                 chrome.tabs.query({}),
                 chrome.windows.getAll({ populate: true })
             ]);
+            // The manifest sets "incognito": "not_allowed", so Chrome never
+            // reports incognito tabs. Filter anyway so that a manifest change
+            // cannot silently start listing (and saving) private browsing.
+            const tabs = allTabs.filter(tab => !tab.incognito);
+            const windows = allWindows.filter(window => !window.incognito);
 
             this.tabs = tabs.map(tab => ({
                 id: tab.id!,
@@ -1141,7 +1146,8 @@ class TabManager {
                 });
             } else {
                 const windows = await chrome.windows.getAll({ populate: true });
-                for (const window of windows.filter(w => w.type === 'normal')) {
+                // Never persist incognito windows (see loadTabs).
+                for (const window of windows.filter(w => w.type === 'normal' && !w.incognito)) {
                     const groups = await chrome.tabGroups.query({ windowId: window.id });
                     session.windows.push({
                         id: window.id!,

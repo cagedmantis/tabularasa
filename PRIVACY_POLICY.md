@@ -1,7 +1,7 @@
 # Privacy Policy for Tabularasa Chrome Extension
 
 **Effective Date**: January 2025  
-**Last Updated**: January 2025
+**Last Updated**: September 2026
 
 ## Overview
 
@@ -20,6 +20,11 @@ To provide tab management functionality, Tabularasa requires access to certain b
 - **Why we need it**: To display and organize your tabs in the extension interface
 - **How we use it**: Information is processed locally in your browser to provide search, filtering, and organization features
 - **Data retention**: No tab information is stored permanently; it's only held in memory while the extension is active
+
+### Incognito Windows
+- **Versions after 1.0.1**: Tabularasa declares `"incognito": "not_allowed"` in its manifest. Chrome therefore does not let it run in, see, or save incognito windows and tabs, and it can no longer be enabled for Incognito. If you had enabled "Allow in Incognito" for an earlier version, that setting stops applying once the update installs
+- **Versions 1.0.0 and 1.0.1**: If you had enabled "Allow in Incognito", incognito tabs were listed in the manager, and a session saved with "All Windows" included their titles and URLs. Those saved sessions stay in local storage on your device until you delete them; updating does not remove them. If this applies to you, review your saved sessions in the Sessions view and delete any you do not want to keep
+- **Why**: Private browsing should never appear in a tab list or be written to a saved session
 
 ### Chrome Tab Groups
 - **What we access**: Tab group information including group names, colors, and which tabs belong to each group
