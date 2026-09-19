@@ -333,10 +333,9 @@ tabularasa/
    - Chrome API integration
 
 2. **Background Service Worker** (`src/background.ts`):
-   - Extension lifecycle management
-   - Real-time tab/window event handling
-   - Session storage operations
-   - Message passing between components
+   - Extension lifecycle management (install, toolbar click)
+   - Stays asleep otherwise: the manager page listens to tab, window and
+     group events itself
 
 3. **Storage System**:
    - Local storage for session data
