@@ -21,6 +21,10 @@ To provide tab management functionality, Tabularasa requires access to certain b
 - **How we use it**: Information is processed locally in your browser to provide search, filtering, and organization features
 - **Data retention**: No tab information is stored permanently; it's only held in memory while the extension is active
 
+### Incognito Windows
+- **What we access**: Nothing. Tabularasa declares `"incognito": "not_allowed"` in its manifest, so Chrome does not let it run in, see, or save incognito windows and tabs, and it cannot be enabled for Incognito
+- **Why**: Private browsing should never appear in a tab list or be written to a saved session
+
 ### Chrome Tab Groups
 - **What we access**: Tab group information including group names, colors, and which tabs belong to each group
 - **Why we need it**: To display and manage Chrome's native tab groups

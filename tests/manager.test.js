@@ -315,6 +315,65 @@ describe('TabManager', () => {
         });
     });
 
+    describe('incognito', () => {
+        test('the manifest keeps the extension out of incognito entirely', () => {
+            const manifest = JSON.parse(
+                fs.readFileSync(path.resolve(__dirname, '../manifest.json'), 'utf8'));
+            expect(manifest.incognito).toBe('not_allowed');
+        });
+
+        test('incognito tabs and windows are never listed', async () => {
+            await createManager({
+                tabs: [
+                    createMockTab({ id: 1, windowId: 1, title: 'Public' }),
+                    createMockTab({ id: 2, windowId: 2, title: 'Private', incognito: true })
+                ],
+                windows: [
+                    createMockWindow({ id: 1, focused: true }),
+                    createMockWindow({ id: 2, incognito: true })
+                ]
+            });
+
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(1);
+            expect(document.body.textContent).not.toContain('Private');
+            expect(document.getElementById('tab-count').textContent).toBe('1 tabs');
+        });
+
+        test('saving all windows skips incognito windows', async () => {
+            const manager = await createManager();
+            chrome.windows.getAll.mockResolvedValue([
+                createMockWindow({ id: 1, tabs: [createMockTab({ id: 1, url: 'https://public.example/' })] }),
+                createMockWindow({
+                    id: 2,
+                    incognito: true,
+                    tabs: [createMockTab({ id: 2, url: 'https://private.example/', incognito: true })]
+                })
+            ]);
+            document.getElementById('session-name').value = 'Everything';
+            document.querySelector('input[name="save-type"][value="all"]').checked = true;
+
+            await manager.saveSession();
+
+            const saved = chrome.storage.local.set.mock.calls[0][0].sessions[0];
+            expect(saved.windows).toHaveLength(1);
+            expect(JSON.stringify(saved)).not.toContain('private.example');
+        });
+
+        test('saving the current window refuses an incognito window', async () => {
+            const manager = await createManager();
+            chrome.windows.getCurrent.mockResolvedValue(createMockWindow({
+                id: 2,
+                incognito: true,
+                tabs: [createMockTab({ id: 2, url: 'https://private.example/', incognito: true })]
+            }));
+            document.getElementById('session-name').value = 'Private';
+
+            await manager.saveSession();
+
+            expect(chrome.storage.local.set).not.toHaveBeenCalled();
+        });
+    });
+
     describe('sessions', () => {
         const session = () => createMockSession({
             id: 'session-1',
