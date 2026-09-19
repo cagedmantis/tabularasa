@@ -84,6 +84,9 @@ class TabManager {
 
     private static readonly SEARCH_DELAY_MS = 100;
 
+    // How many tab titles a confirmation lists before summarising the rest.
+    private static readonly CONFIRM_LIST_LIMIT = 10;
+
     private static readonly FALLBACK_FAVICON =
         'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
 
@@ -320,7 +323,8 @@ class TabManager {
         const toTabInfo = (tab: chrome.tabs.Tab): TabInfo => ({
             id: tab.id!,
             title: tab.title || '',
-            url: tab.url || '',
+            // A tab that is still loading has no url yet, only pendingUrl.
+            url: tab.url || tab.pendingUrl || '',
             favIconUrl: tab.favIconUrl,
             active: tab.active,
             pinned: tab.pinned,
@@ -1078,10 +1082,19 @@ class TabManager {
      * closes go ahead because they can be undone. Returns the tabs to close,
      * which is empty when the user declined.
      */
-    private async confirmClose(tabs: TabInfo[]): Promise<TabInfo[]> {
+    private async confirmClose(tabs: TabInfo[], options: { listTabs?: boolean } = {}): Promise<TabInfo[]> {
         const hiddenCount = this.countHidden(tabs.map(tab => tab.id));
-        if (tabs.length >= TabManager.CONFIRM_CLOSE_THRESHOLD || hiddenCount > 0) {
+        // listTabs is for closes where the program, not the user, picked the
+        // tabs: always ask, and show which ones.
+        if (options.listTabs || tabs.length >= TabManager.CONFIRM_CLOSE_THRESHOLD || hiddenCount > 0) {
             let question = `Close ${this.plural(tabs.length, 'tab')}?`;
+            if (options.listTabs) {
+                const listed = tabs.slice(0, TabManager.CONFIRM_LIST_LIMIT);
+                question += '\n\n' + listed.map(tab => `\u2022 ${tab.title || tab.url}`).join('\n');
+                if (tabs.length > listed.length) {
+                    question += `\n\u2026 and ${tabs.length - listed.length} more`;
+                }
+            }
             if (hiddenCount > 0) {
                 question += `\n\n${hiddenCount} of them ${hiddenCount === 1 ? 'is' : 'are'} hidden by the current search or filter.`;
             }
@@ -1339,6 +1352,29 @@ class TabManager {
         }
     }
 
+    /**
+     * Orders duplicates so the copy most worth keeping comes first: this
+     * page, then a pinned, active, audible or grouped tab (closing those
+     * loses more than a plain tab), then the most recently used.
+     */
+    private compareKeepPriority(a: TabInfo, b: TabInfo): number {
+        const rank = (tab: TabInfo): number[] => [
+            this.isOwnTab(tab.id),
+            tab.pinned,
+            tab.active,
+            tab.audible ?? false,
+            tab.groupId !== undefined && tab.groupId !== -1
+        ].map(Number);
+        const rankA = rank(a);
+        const rankB = rank(b);
+        for (let i = 0; i < rankA.length; i++) {
+            if (rankA[i] !== rankB[i]) {
+                return rankB[i] - rankA[i];
+            }
+        }
+        return (b.lastAccessed || 0) - (a.lastAccessed || 0);
+    }
+
     private async closeDuplicateTabs(): Promise<void> {
         try {
             const urlGroups = new Map<string, TabInfo[]>();
@@ -1358,9 +1394,8 @@ class TabManager {
             const duplicates: TabInfo[] = [];
             urlGroups.forEach(tabGroup => {
                 if (tabGroup.length > 1) {
-                    tabGroup.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-                    const keep = tabGroup.find(tab => this.isOwnTab(tab.id)) ?? tabGroup[0];
-                    duplicates.push(...tabGroup.filter(tab => tab !== keep));
+                    const [, ...rest] = [...tabGroup].sort((a, b) => this.compareKeepPriority(a, b));
+                    duplicates.push(...rest);
                 }
             });
 
@@ -1369,7 +1404,7 @@ class TabManager {
                 return;
             }
 
-            const tabsToClose = await this.confirmClose(duplicates);
+            const tabsToClose = await this.confirmClose(duplicates, { listTabs: true });
             if (tabsToClose.length === 0) {return;}
 
             // Close tabs individually to handle cases where some tabs may already be closed
