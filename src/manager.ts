@@ -752,6 +752,11 @@ class TabManager {
         this.elements.sessionView.classList.remove('active');
     }
 
+    private showSessionView(): void {
+        this.elements.sessionView.classList.add('active');
+        this.elements.tabView.classList.remove('active');
+    }
+
     private toggleTabSelection(tabId: number): void {
         if (this.selectedTabs.has(tabId)) {
             this.selectedTabs.delete(tabId);
@@ -1088,6 +1093,10 @@ class TabManager {
     private showSaveSessionForm(): void {
         const form = document.getElementById('session-save-form');
         if (form) {
+            // The form lives inside the session view, but the button that
+            // opens it is in the tab view, so switch views first; otherwise
+            // the form is revealed inside a display:none container.
+            this.showSessionView();
             form.classList.remove('hidden');
             const nameInput = document.getElementById('session-name') as HTMLInputElement;
             nameInput.focus();
