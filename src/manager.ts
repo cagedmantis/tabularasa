@@ -88,6 +88,9 @@ class TabManager {
     private static readonly CONFIRM_LIST_LIMIT = 10;
     private static readonly DIALOG_LABEL_LIMIT = 80;
 
+    private static readonly UI_STATE_KEY = 'tabularasa-ui-state';
+    private static readonly VIEWS: ViewType[] = ['windows', 'groups', 'domains'];
+
     private static readonly FALLBACK_FAVICON =
         'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
 
@@ -120,6 +123,8 @@ class TabManager {
     // refresh it calls for happens when the page is shown again.
     private refreshPending: boolean = false;
     private statusMessageDuration: number = TabManager.STATUS_DURATION_MS;
+    // A sticky message stays until it is dismissed or replaced.
+    private statusMessageSticky: boolean = false;
     private restoringSession: boolean = false;
     // Id of the tab hosting this page. It is listed like any other tab but is
     // kept out of selections and bulk closes: removing it destroys this page
@@ -143,7 +148,15 @@ class TabManager {
     };
 
     constructor() {
-        this.init();
+        this.init().catch(error => {
+            // Without this a failure during startup is an unhandled
+            // rejection behind a blank page or an endless spinner.
+            console.error('Error starting Tabularasa:', error);
+            this.showLoading(false);
+            // Sticky: once this message went away the page would be blank
+            // with nothing to say why.
+            this.showStatusMessage('Tabularasa could not start. Reload this tab to try again.', 'error', undefined, true);
+        });
     }
 
     private async init(): Promise<void> {
@@ -152,6 +165,7 @@ class TabManager {
         // is in flight is missed.
         this.setupBrowserListeners();
         this.setupStorageListener();
+        this.restoreUiState();
         await this.loadInitialData();
         this.render();
         this.renderSessions();
@@ -1003,6 +1017,7 @@ class TabManager {
         // filter" checks never act on an older query than the box shows;
         // only the rebuild waits for typing to pause.
         this.searchQuery = this.elements.searchInput.value.trim();
+        this.saveUiState();
         if (this.searchTimer !== null) {
             clearTimeout(this.searchTimer);
         }
@@ -1019,18 +1034,66 @@ class TabManager {
         }
         this.elements.searchInput.value = '';
         this.searchQuery = '';
+        this.saveUiState();
         this.render();
     }
 
     private handleFilterChange(): void {
         this.filterType = this.elements.filterType.value as 'all' | 'active' | 'pinned' | 'audible' | 'grouped';
+        this.saveUiState();
         this.render();
     }
 
     private toggleView(): void {
-        const order: ViewType[] = ['windows', 'groups', 'domains'];
+        const order = TabManager.VIEWS;
         this.currentView = order[(order.indexOf(this.currentView) + 1) % order.length];
+        this.saveUiState();
         this.render();
+    }
+
+    /**
+     * View, filter and search are kept in sessionStorage, which lives as
+     * long as the tab: they survive a reload and the tab being discarded by
+     * Memory Saver. A manager opened from the toolbar starts clean; one made
+     * with "Duplicate tab" or brought back by browser session restore gets a
+     * copy of the state. Storage can be unavailable, and its content is
+     * validated, so neither can break startup.
+     */
+    private saveUiState(): void {
+        try {
+            sessionStorage.setItem(TabManager.UI_STATE_KEY, JSON.stringify({
+                view: this.currentView,
+                filter: this.filterType,
+                search: this.searchQuery
+            }));
+        } catch (error) {
+            console.warn('Could not save the view state:', error);
+        }
+    }
+
+    private restoreUiState(): void {
+        try {
+            const state = JSON.parse(sessionStorage.getItem(TabManager.UI_STATE_KEY) || '{}') ?? {};
+            if (TabManager.VIEWS.includes(state.view)) {
+                this.currentView = state.view;
+            }
+            const filterOption = Array.from(this.elements.filterType.options)
+                .find(option => option.value === state.filter);
+            if (filterOption) {
+                this.filterType = filterOption.value as typeof this.filterType;
+            }
+            if (typeof state.search === 'string') {
+                this.searchQuery = state.search;
+            }
+        } catch (error) {
+            console.warn('Could not restore the view state:', error);
+        }
+
+        // Always, not only when something was restored: on reload Chrome
+        // refills form controls itself, which could leave them showing a
+        // filter or search that is not the one in effect.
+        this.elements.filterType.value = this.filterType;
+        this.elements.searchInput.value = this.searchQuery;
     }
 
     private updateViewToggle(): void {
@@ -1964,7 +2027,8 @@ class TabManager {
     private showStatusMessage(
         message: string,
         type: 'success' | 'error' | 'warning' = 'success',
-        action?: { label: string; handler: () => void }
+        action?: { label: string; handler: () => void },
+        sticky: boolean = false
     ): void {
         const messageElement = this.elements.statusMessage.querySelector('.message-text') as HTMLElement;
         messageElement.textContent = message;
@@ -1986,6 +2050,7 @@ class TabManager {
             : null;
 
         this.statusMessageDuration = action ? TabManager.UNDO_DURATION_MS : TabManager.STATUS_DURATION_MS;
+        this.statusMessageSticky = sticky;
         this.startStatusMessageTimer();
     }
 
@@ -1994,7 +2059,10 @@ class TabManager {
         // dismiss this one prematurely.
         if (this.statusMessageTimer !== null) {
             clearTimeout(this.statusMessageTimer);
+            this.statusMessageTimer = null;
         }
+        if (this.statusMessageSticky) {return;}
+
         this.statusMessageTimer = setTimeout(() => {
             this.hideStatusMessage();
         }, this.statusMessageDuration);

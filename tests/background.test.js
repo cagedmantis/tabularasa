@@ -18,13 +18,9 @@ const browserEventListeners = [
     ...Object.values(chrome.windows)
 ].filter(member => member && member.addListener)
     .reduce((count, event) => count + event.addListener.mock.calls.length, 0);
-const onMessage = chrome.runtime.onMessage.addListener.mock.calls[0][0];
+const messageListeners = chrome.runtime.onMessage.addListener.mock.calls.length;
 
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
-
-beforeEach(() => {
-    chrome.runtime.sendMessage.mockResolvedValue(undefined);
-});
 
 describe('background service worker', () => {
     describe('browser events', () => {
@@ -49,6 +45,17 @@ describe('background service worker', () => {
             expect(chrome.tabs.create).not.toHaveBeenCalled();
         });
 
+        test('queries for the manager by pattern, so a query string cannot hide it', async () => {
+            chrome.tabs.query.mockResolvedValue([]);
+            chrome.tabs.create.mockResolvedValue({ id: 9 });
+
+            await onActionClicked();
+
+            expect(chrome.tabs.query).toHaveBeenCalledWith({
+                url: 'chrome-extension://test-extension-id/manager.html*'
+            });
+        });
+
         test('opens the manager in a new tab when none exists', async () => {
             chrome.tabs.query.mockResolvedValue([]);
             chrome.tabs.create.mockResolvedValue({ id: 9 });
@@ -60,50 +67,40 @@ describe('background service worker', () => {
                 active: true
             });
         });
+
+        test('opens a new manager when the found one closed before it could be focused', async () => {
+            chrome.tabs.query.mockResolvedValue([{ id: 3, windowId: 4 }]);
+            chrome.tabs.update.mockRejectedValue(new Error('No tab with id: 3'));
+            chrome.tabs.create.mockResolvedValue({ id: 9 });
+
+            await expect(onActionClicked()).resolves.toBeUndefined();
+
+            expect(chrome.tabs.create).toHaveBeenCalledWith({ url: 'manager.html', active: true });
+        });
+
+        test('does not open a second manager when only raising the window failed', async () => {
+            chrome.tabs.query.mockResolvedValue([{ id: 3, windowId: 4 }]);
+            chrome.tabs.update.mockResolvedValue(undefined);
+            chrome.windows.update.mockRejectedValue(new Error('No window with id: 4'));
+
+            await onActionClicked();
+
+            expect(chrome.tabs.create).not.toHaveBeenCalled();
+        });
+
+        test('never rejects, even when nothing can be opened', async () => {
+            chrome.tabs.query.mockRejectedValue(new Error('query failed'));
+            chrome.tabs.create.mockRejectedValue(new Error('create failed'));
+
+            await expect(onActionClicked()).resolves.toBeUndefined();
+        });
     });
 
-    describe('session messages', () => {
-        test('GET_SESSIONS responds with stored sessions', () => {
-            const sessions = [createMockSession()];
-            chrome.storage.local.get.mockImplementation((keys, callback) => callback({ sessions }));
-            const sendResponse = jest.fn();
-
-            const keepChannelOpen = onMessage({ type: 'GET_SESSIONS' }, {}, sendResponse);
-
-            expect(keepChannelOpen).toBe(true);
-            expect(sendResponse).toHaveBeenCalledWith({ sessions });
-        });
-
-        test('SAVE_SESSION appends the session and confirms', () => {
-            const existing = createMockSession({ id: 'existing' });
-            const added = createMockSession({ id: 'added' });
-            chrome.storage.local.get.mockImplementation((keys, callback) => callback({ sessions: [existing] }));
-            chrome.storage.local.set.mockImplementation((data, callback) => callback());
-            const sendResponse = jest.fn();
-
-            onMessage({ type: 'SAVE_SESSION', session: added }, {}, sendResponse);
-
-            expect(chrome.storage.local.set).toHaveBeenCalledWith(
-                { sessions: [existing, added] },
-                expect.any(Function)
-            );
-            expect(sendResponse).toHaveBeenCalledWith({ success: true });
-        });
-
-        test('DELETE_SESSION removes only the matching session', () => {
-            const keep = createMockSession({ id: 'keep' });
-            const drop = createMockSession({ id: 'drop' });
-            chrome.storage.local.get.mockImplementation((keys, callback) => callback({ sessions: [keep, drop] }));
-            chrome.storage.local.set.mockImplementation((data, callback) => callback());
-            const sendResponse = jest.fn();
-
-            onMessage({ type: 'DELETE_SESSION', sessionId: 'drop' }, {}, sendResponse);
-
-            expect(chrome.storage.local.set).toHaveBeenCalledWith(
-                { sessions: [keep] },
-                expect.any(Function)
-            );
-            expect(sendResponse).toHaveBeenCalledWith({ success: true });
+    describe('messages', () => {
+        test('the worker exposes no message API', () => {
+            // The manager reads and writes sessions itself; the old
+            // GET/SAVE/DELETE_SESSION handlers were unused and racy.
+            expect(messageListeners).toBe(0);
         });
     });
 
@@ -116,7 +113,6 @@ describe('background service worker', () => {
 
             onInstalled();
 
-            expect(chrome.action.setPopup).toHaveBeenCalledWith({ popup: '' });
             expect(chrome.storage.local.set).toHaveBeenCalledWith({ sessions: [] });
         });
 

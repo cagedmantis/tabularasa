@@ -28,8 +28,13 @@ async function typeSearch(text) {
     await wait(SEARCH_DELAY_MS + 30);
 }
 
-async function createManager({ tabs = [], windows = [], groups = [], sessions = [], ownTabId } = {}) {
+async function createManager({ tabs = [], windows = [], groups = [], sessions = [], ownTabId, keepUiState = false } = {}) {
     document.body.innerHTML = bodyHtml;
+    // View state persists for the life of the tab; tests start clean unless
+    // they are about that persistence.
+    if (!keepUiState) {
+        sessionStorage.clear();
+    }
 
     chrome.tabs.query.mockResolvedValue(tabs);
     if (ownTabId instanceof Error) {
@@ -2061,6 +2066,126 @@ describe('TabManager', () => {
 
             const written = chrome.storage.local.set.mock.calls[0][0].sessions;
             expect(written.map(session => session.name)).toEqual(['Fresh']);
+        });
+    });
+
+    describe('startup and view state', () => {
+        const threeKinds = () => [
+            createMockTab({ id: 1, title: 'Pinned GitHub', url: 'https://github.com/', pinned: true }),
+            createMockTab({ id: 2, title: 'Pinned Example', url: 'https://example.com/', pinned: true }),
+            createMockTab({ id: 3, title: 'Plain GitHub', url: 'https://github.com/x' })
+        ];
+
+        test('view, filter and search survive a reload of the tab', async () => {
+            await createManager({ tabs: threeKinds() });
+            document.getElementById('view-toggle').click();
+            document.getElementById('view-toggle').click(); // domains
+            const filter = document.getElementById('filter-type');
+            filter.value = 'pinned';
+            filter.dispatchEvent(new window.Event('change'));
+            await typeSearch('github');
+
+            await createManager({ tabs: threeKinds(), keepUiState: true }); // "reload"
+
+            expect(document.getElementById('view-toggle').textContent).toContain('Domains');
+            expect(document.getElementById('filter-type').value).toBe('pinned');
+            expect(document.getElementById('search-input').value).toBe('github');
+            expect(Array.from(document.querySelectorAll('.tab-title')).map(el => el.textContent))
+                .toEqual(['Pinned GitHub']);
+        });
+
+        test('clearing the search is remembered too', async () => {
+            await createManager({ tabs: threeKinds() });
+            await typeSearch('github');
+            document.getElementById('clear-search').click();
+
+            await createManager({ tabs: threeKinds(), keepUiState: true });
+
+            expect(document.getElementById('search-input').value).toBe('');
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(3);
+        });
+
+        test.each([
+            ['not JSON', 'not json{'],
+            ['unknown values', JSON.stringify({ view: 'evil', filter: '<img>', search: 42 })],
+            ['a non-object', JSON.stringify(null)]
+        ])('stored state that is %s is ignored', async (_, stored) => {
+            sessionStorage.setItem('tabularasa-ui-state', stored);
+
+            await createManager({ tabs: threeKinds(), keepUiState: true });
+
+            expect(document.getElementById('view-toggle').textContent).toContain('Windows');
+            expect(document.getElementById('filter-type').value).toBe('all');
+            expect(document.getElementById('search-input').value).toBe('');
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(3);
+        });
+
+        test('a failure during startup shows an error instead of a blank page', async () => {
+            document.body.innerHTML = bodyHtml;
+            sessionStorage.clear();
+            chrome.tabs.getCurrent.mockResolvedValue(undefined);
+            chrome.tabs.query.mockResolvedValue([createMockTab({ id: 1 })]);
+            jest.spyOn(TabManager.prototype, 'render').mockImplementationOnce(() => {
+                throw new Error('render exploded');
+            });
+
+            new TabManager();
+            await flush();
+
+            const status = document.getElementById('status-message');
+            expect(status.textContent).toContain('could not start');
+            expect(status.classList.contains('error')).toBe(true);
+            expect(document.getElementById('loading').classList.contains('hidden')).toBe(true);
+
+            // It must not time out and leave a blank page with no explanation
+            jest.useFakeTimers();
+            try {
+                jest.advanceTimersByTime(60000);
+                expect(status.classList.contains('hidden')).toBe(false);
+                status.dispatchEvent(new window.MouseEvent('mouseleave'));
+                jest.advanceTimersByTime(60000);
+                expect(status.classList.contains('hidden')).toBe(false);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        test('an ordinary message after a sticky one times out as usual', async () => {
+            const manager = await createManager();
+            const status = document.getElementById('status-message');
+            jest.useFakeTimers();
+            try {
+                manager.showStatusMessage('Stays', 'error', undefined, true);
+                jest.advanceTimersByTime(60000);
+                expect(status.classList.contains('hidden')).toBe(false);
+
+                manager.showStatusMessage('Goes');
+                jest.advanceTimersByTime(3500);
+                expect(status.classList.contains('hidden')).toBe(true);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        test('form controls always show the state in effect, even if the browser refilled them', async () => {
+            await createManager({ tabs: threeKinds() }); // sets up the mocks; nothing is stored
+            // A reload where Chrome's form restoration refilled the controls
+            document.body.innerHTML = bodyHtml;
+            document.getElementById('search-input').value = 'stale';
+            document.getElementById('filter-type').value = 'pinned';
+
+            new TabManager();
+            await flush();
+
+            expect(document.getElementById('search-input').value).toBe('');
+            expect(document.getElementById('filter-type').value).toBe('all');
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(3);
+        });
+
+        test('the manifest refuses Chrome versions without the favicon API', () => {
+            const manifest = JSON.parse(
+                fs.readFileSync(path.resolve(__dirname, '../manifest.json'), 'utf8'));
+            expect(Number(manifest.minimum_chrome_version)).toBeGreaterThanOrEqual(104);
         });
     });
 
