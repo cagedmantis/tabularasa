@@ -183,6 +183,142 @@ describe('TabManager', () => {
         });
     });
 
+    describe('live updates', () => {
+        const REFRESH_DELAY_MS = 150;
+        const fire = (event, ...args) =>
+            event.addListener.mock.calls.forEach(([listener]) => listener(...args));
+        const setHidden = (hidden) => {
+            Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+            document.dispatchEvent(new window.Event('visibilitychange'));
+        };
+        const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        afterEach(() => {
+            delete document.hidden;
+        });
+
+        test('subscribes to browser events itself, before the first load finishes', async () => {
+            document.body.innerHTML = bodyHtml;
+            chrome.tabs.getCurrent.mockResolvedValue(undefined);
+            chrome.tabs.query.mockReturnValue(new Promise(() => {})); // load never finishes
+            new TabManager();
+
+            [
+                chrome.tabs.onCreated, chrome.tabs.onUpdated, chrome.tabs.onRemoved,
+                chrome.tabs.onActivated, chrome.tabs.onMoved, chrome.tabs.onAttached,
+                chrome.tabs.onDetached, chrome.tabs.onReplaced,
+                chrome.windows.onCreated, chrome.windows.onRemoved, chrome.windows.onFocusChanged,
+                chrome.tabGroups.onCreated, chrome.tabGroups.onUpdated,
+                chrome.tabGroups.onMoved, chrome.tabGroups.onRemoved
+            ].forEach(event => expect(event.addListener).toHaveBeenCalledTimes(1));
+            expect(chrome.runtime.onMessage.addListener).not.toHaveBeenCalled();
+        });
+
+        test('a burst of events causes a single refresh', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+            chrome.tabs.query.mockClear();
+            chrome.tabs.query.mockResolvedValue([createMockTab({ id: 1 }), createMockTab({ id: 2 })]);
+
+            for (let i = 0; i < 20; i++) {
+                fire(chrome.tabs.onUpdated, 1, { status: 'loading' });
+                fire(chrome.tabs.onRemoved, 3, {});
+            }
+            expect(chrome.tabs.query).not.toHaveBeenCalled();
+
+            await wait(REFRESH_DELAY_MS + 50);
+
+            expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(2);
+        });
+
+        test('a steady stream of events cannot postpone the refresh forever', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+            chrome.tabs.query.mockClear();
+
+            // Events keep arriving more often than the coalescing window
+            for (let elapsed = 0; elapsed < REFRESH_DELAY_MS * 2; elapsed += 50) {
+                fire(chrome.tabs.onUpdated, 1, {});
+                await wait(50);
+            }
+
+            expect(chrome.tabs.query.mock.calls.length).toBeGreaterThanOrEqual(1);
+        });
+
+        test('while hidden, events are remembered and applied when shown again', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+            chrome.tabs.query.mockClear();
+            chrome.tabs.query.mockResolvedValue([]);
+
+            setHidden(true);
+            fire(chrome.tabs.onRemoved, 1, {});
+            await wait(REFRESH_DELAY_MS + 50);
+            expect(chrome.tabs.query).not.toHaveBeenCalled();
+
+            setHidden(false);
+            await wait(REFRESH_DELAY_MS + 50);
+            expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(0);
+        });
+
+        test('becoming visible with nothing pending does not refresh', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+            chrome.tabs.query.mockClear();
+
+            setHidden(true);
+            setHidden(false);
+            await wait(REFRESH_DELAY_MS + 50);
+
+            expect(chrome.tabs.query).not.toHaveBeenCalled();
+        });
+
+        test('a refresh overtaken by a newer one does not render its stale snapshot', async () => {
+            const manager = await createManager({ tabs: [createMockTab({ id: 1 })] });
+
+            let resolveSlow;
+            chrome.tabs.query
+                .mockReturnValueOnce(new Promise(resolve => { resolveSlow = resolve; }))
+                .mockResolvedValueOnce([createMockTab({ id: 1 }), createMockTab({ id: 2 })]);
+
+            const slow = manager.refreshTabs();   // started first, finishes last
+            await manager.refreshTabs();          // newer
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(2);
+
+            resolveSlow([]);                      // the old, now wrong, answer arrives
+            await slow;
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(2);
+        });
+
+        test('tabs and groups always come from the same refresh', async () => {
+            const manager = await createManager({ tabs: [createMockTab({ id: 1, groupId: -1 })] });
+            document.getElementById('view-toggle').click(); // groups view
+
+            let resolveSlowGroups;
+            chrome.tabGroups.query
+                .mockReturnValueOnce(new Promise(resolve => { resolveSlowGroups = resolve; }))
+                .mockResolvedValueOnce([{ id: 10, title: 'Work', color: 'blue', collapsed: false, windowId: 1 }]);
+            chrome.tabs.query.mockResolvedValue([createMockTab({ id: 1, groupId: 10 })]);
+
+            const slow = manager.refreshTabs();
+            await manager.refreshTabs();
+            resolveSlowGroups([]);                // stale: the group did not exist yet
+            await slow;
+
+            expect(groupTitles()).toEqual(['Work']);
+        });
+
+        test('a replaced tab keeps its place in the selection', async () => {
+            const manager = await createManager({ tabs: [createMockTab({ id: 1 }), createMockTab({ id: 2 })] });
+            manager.toggleTabSelection(1);
+            chrome.tabs.query.mockResolvedValue([createMockTab({ id: 7 }), createMockTab({ id: 2 })]);
+
+            fire(chrome.tabs.onReplaced, 7, 1);
+            await wait(REFRESH_DELAY_MS + 50);
+
+            expect(document.getElementById('selected-count').textContent).toBe('1 selected');
+            expect(document.querySelector('[data-tab-id="7"] .tab-checkbox').checked).toBe(true);
+        });
+    });
+
     describe('favicons', () => {
         test('resolves favicons through the local _favicon endpoint instead of fetching tab.favIconUrl directly', async () => {
             // tab.favIconUrl points at a third-party host; loading it directly

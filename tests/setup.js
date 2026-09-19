@@ -35,6 +35,12 @@ global.chrome = {
         },
         onAttached: {
             addListener: jest.fn()
+        },
+        onDetached: {
+            addListener: jest.fn()
+        },
+        onReplaced: {
+            addListener: jest.fn()
         }
     },
     tabGroups: {
@@ -48,6 +54,9 @@ global.chrome = {
         },
         onRemoved: {
             addListener: jest.fn()
+        },
+        onMoved: {
+            addListener: jest.fn()
         }
     },
     windows: {
@@ -55,7 +64,13 @@ global.chrome = {
         create: jest.fn(),
         update: jest.fn(),
         getCurrent: jest.fn(),
+        onCreated: {
+            addListener: jest.fn()
+        },
         onRemoved: {
+            addListener: jest.fn()
+        },
+        onFocusChanged: {
             addListener: jest.fn()
         }
     },
