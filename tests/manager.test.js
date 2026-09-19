@@ -432,6 +432,15 @@ describe('TabManager', () => {
             expect(chrome.tabs.remove).toHaveBeenCalledWith(2);
         });
 
+        test('New Tab opens the browser\'s own New Tab page, without naming a URL', async () => {
+            await createManager();
+
+            document.getElementById('new-tab').click();
+            await flush();
+
+            expect(chrome.tabs.create).toHaveBeenCalledWith({});
+        });
+
         test('group creation applies the chosen color even without a name', async () => {
             const manager = await createManager({
                 tabs: [createMockTab({ id: 1 })]

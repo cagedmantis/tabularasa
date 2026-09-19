@@ -1049,7 +1049,12 @@ class TabManager {
 
     private async createNewTab(): Promise<void> {
         try {
-            await chrome.tabs.create({ url: 'chrome://newtab/' });
+            // No url: Chrome then opens the profile's own New Tab page.
+            // Naming chrome://newtab/ asks for the legacy page Chrome only
+            // serves in incognito and guest windows, which a regular profile
+            // logs as "Requested load of chrome://newtab/ for incorrect
+            // profile type", and it bypasses a user's New Tab extension.
+            await chrome.tabs.create({});
             this.showStatusMessage('New tab created');
         } catch (error) {
             console.error('Error creating new tab:', error);
