@@ -673,6 +673,63 @@ describe('TabManager', () => {
         });
     });
 
+    describe('development build indicator', () => {
+        const badge = () => document.getElementById('dev-badge');
+
+        afterEach(() => {
+            document.title = '';
+        });
+
+        test('a Web Store install shows no badge and keeps its title', async () => {
+            document.title = 'Tabularasa - Tab Manager';
+            await createManager();
+
+            expect(badge().classList.contains('hidden')).toBe(true);
+            expect(badge().textContent).toBe('');
+            expect(document.title).toBe('Tabularasa - Tab Manager');
+        });
+
+        test('an unpacked build shows a DEV badge with its version and marks the tab title', async () => {
+            // Chrome adds update_url only to store installs
+            chrome.runtime.getManifest.mockReturnValueOnce({ version: '1.0.1' });
+            document.title = 'Tabularasa - Tab Manager';
+            await createManager();
+
+            expect(badge().classList.contains('hidden')).toBe(false);
+            expect(badge().textContent).toBe('DEV v1.0.1');
+            expect(badge().getAttribute('aria-label')).toBe('Development build, version 1.0.1');
+            expect(document.title).toBe('[DEV] Tabularasa - Tab Manager');
+        });
+
+        test('the title is marked once, however often a manager starts', async () => {
+            chrome.runtime.getManifest.mockReturnValue({ version: '1.0.1' });
+            document.title = 'Tabularasa - Tab Manager';
+            try {
+                await createManager();
+                await createManager();
+            } finally {
+                // Back to the store-install default from tests/setup.js
+                chrome.runtime.getManifest.mockReturnValue({
+                    version: '1.2.3',
+                    update_url: 'https://clients2.google.com/service/update2/crx'
+                });
+            }
+
+            expect(document.title).toBe('[DEV] Tabularasa - Tab Manager');
+        });
+
+        test('failing to read the manifest does not stop the manager from starting', async () => {
+            chrome.runtime.getManifest.mockImplementationOnce(() => {
+                throw new Error('Extension context invalidated');
+            });
+
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(1);
+            expect(badge().classList.contains('hidden')).toBe(true);
+        });
+    });
+
     describe('selection', () => {
         test('selecting a tab enables bulk actions and updates counts', async () => {
             const manager = await createManager({

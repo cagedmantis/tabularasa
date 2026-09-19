@@ -160,6 +160,7 @@ class TabManager {
     }
 
     private async init(): Promise<void> {
+        this.markDevelopmentBuild();
         this.setupEventListeners();
         // Subscribe before the first load so nothing that happens while it
         // is in flight is missed.
@@ -169,6 +170,40 @@ class TabManager {
         await this.loadInitialData();
         this.render();
         this.renderSessions();
+    }
+
+    /**
+     * Makes an unpacked build recognisable, so it is never mistaken for the
+     * installed Web Store copy when both are present: a badge in the header
+     * and a prefix on the tab title.
+     *
+     * Chrome adds update_url to the manifest of anything installed from the
+     * store; a build loaded from disk has none. management.getSelf()'s
+     * installType is the more exact signal (it also needs no permission),
+     * but it is asynchronous, so the badge would appear late, and it only
+     * differs for packed installs without an update_url (policy, drag and
+     * drop), which is not how this extension is distributed and would cost
+     * no more than a wrong badge.
+     */
+    private markDevelopmentBuild(): void {
+        try {
+            const manifest = chrome.runtime.getManifest();
+            if ('update_url' in manifest) {return;}
+
+            const badge = document.getElementById('dev-badge');
+            if (badge) {
+                badge.textContent = `DEV v${manifest.version}`;
+                badge.title = 'Unpacked development build, not the Chrome Web Store version';
+                badge.setAttribute('aria-label', `Development build, version ${manifest.version}`);
+                badge.classList.remove('hidden');
+            }
+            if (!document.title.startsWith('[DEV] ')) {
+                document.title = `[DEV] ${document.title}`;
+            }
+        } catch (error) {
+            // Purely cosmetic: never let it stop the manager from starting.
+            console.warn('Could not determine the build type:', error);
+        }
     }
 
     private setupEventListeners(): void {
