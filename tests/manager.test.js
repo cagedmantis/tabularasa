@@ -314,8 +314,10 @@ describe('TabManager', () => {
                 tabs: [createMockTab({ id: 1 }), createMockTab({ id: 2 })],
                 windows: [createMockWindow({ id: 1, focused: true })]
             });
-            chrome.tabs.remove.mockRejectedValueOnce(new Error('No tab with id: 2'));
-            chrome.tabs.query.mockResolvedValue([]);
+            chrome.tabs.remove.mockImplementationOnce(async () => {
+                chrome.tabs.query.mockResolvedValue([]);
+                throw new Error('No tab with id: 2');
+            });
 
             document.querySelector('.tab-group-actions .btn-danger').click();
             await flush();
@@ -418,25 +420,27 @@ describe('TabManager', () => {
         const undoButton = () => document.querySelector('#status-message .status-action');
 
         test('a small, fully visible close does not ask for confirmation', async () => {
-            await setup(4);
+            await setup(9);
 
             closeAll().click();
             await flush();
 
             expect(window.confirm).not.toHaveBeenCalled();
-            expect(chrome.tabs.remove).toHaveBeenCalledWith([1, 2, 3, 4]);
+            expect(chrome.tabs.remove).toHaveBeenCalledWith([1, 2, 3, 4, 5, 6, 7, 8, 9]);
         });
 
         test('a large close asks first and does nothing when declined', async () => {
-            await setup(5);
+            await setup(10);
             window.confirm.mockReturnValue(false);
 
             closeAll().click();
             await flush();
 
-            expect(window.confirm).toHaveBeenCalledWith('Close 5 tabs?');
+            expect(window.confirm).toHaveBeenCalledWith('Close 10 tabs?');
             expect(chrome.tabs.remove).not.toHaveBeenCalled();
-            expect(document.querySelectorAll('.tab-item')).toHaveLength(5);
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(10);
+            // Feedback even if Chrome suppressed the dialog and answered for the user
+            expect(document.getElementById('status-message').textContent).toContain('Nothing was closed');
         });
 
         test('selections hidden by the search are counted and confirmed', async () => {
@@ -455,22 +459,60 @@ describe('TabManager', () => {
             await manager.closeSelectedTabs();
 
             expect(window.confirm.mock.calls[0][0]).toContain('Close 2 tabs?');
-            expect(window.confirm.mock.calls[0][0]).toContain('1 of them are hidden');
+            expect(window.confirm.mock.calls[0][0]).toContain('1 of them is hidden');
             expect(chrome.tabs.remove).not.toHaveBeenCalled();
             expect(document.getElementById('selected-count').textContent).toContain('2 selected');
+            expect(document.getElementById('status-message').textContent).toContain('Nothing was closed');
+        });
+
+        test('tabs that closed while the dialog was up are dropped before removing', async () => {
+            const manager = await setup(10);
+            // Tab 4 went away while confirm() was blocking the page
+            window.confirm.mockImplementation(() => {
+                chrome.tabs.query.mockResolvedValue(tabsInWindow(10).filter(tab => tab.id !== 4));
+                return true;
+            });
+
+            closeAll().click();
+            await flush();
+
+            expect(chrome.tabs.remove).toHaveBeenCalledWith([1, 2, 3, 5, 6, 7, 8, 9, 10]);
+            expect(document.getElementById('status-message').textContent).toContain('9 tabs closed');
+            expect(manager).toBeDefined();
         });
 
         test('Close Duplicates confirms a large close', async () => {
             const manager = await createManager({
-                tabs: Array.from({ length: 6 }, (_, i) =>
-                    createMockTab({ id: i + 1, index: i, url: 'https://example.com/', lastAccessed: 6 - i }))
+                tabs: Array.from({ length: 11 }, (_, i) =>
+                    createMockTab({ id: i + 1, index: i, url: 'https://example.com/', lastAccessed: 11 - i }))
             });
             window.confirm.mockReturnValue(false);
 
             await manager.closeDuplicateTabs();
 
-            expect(window.confirm).toHaveBeenCalledWith('Close 5 tabs?');
+            expect(window.confirm).toHaveBeenCalledWith('Close 10 tabs?');
             expect(chrome.tabs.remove).not.toHaveBeenCalled();
+        });
+
+        test('Close Duplicates survives the list refreshing while it closes tabs', async () => {
+            const tabs = Array.from({ length: 4 }, (_, i) =>
+                createMockTab({ id: i + 1, index: i, url: 'https://example.com/', lastAccessed: 4 - i }));
+            const manager = await createManager({ tabs });
+            // In Chrome every removal is followed by a TAB_REMOVED refresh
+            // that replaces the manager's tab list mid-loop.
+            chrome.tabs.remove.mockImplementation(async (tabId) => {
+                chrome.tabs.query.mockResolvedValue([tabs[0]]);
+                await manager.refreshTabs();
+                return tabId;
+            });
+
+            await manager.closeDuplicateTabs();
+
+            expect(chrome.tabs.remove.mock.calls.map(([id]) => id)).toEqual([2, 3, 4]);
+            const status = document.getElementById('status-message');
+            expect(status.classList.contains('error')).toBe(false);
+            expect(status.textContent).toContain('3 duplicate tabs closed');
+            expect(undoButton().classList.contains('hidden')).toBe(false);
         });
 
         test('Undo reopens closed tabs at their old position', async () => {
@@ -495,19 +537,75 @@ describe('TabManager', () => {
             expect(undoButton().classList.contains('hidden')).toBe(true);
         });
 
-        test('Undo falls back to the current window when the old window is gone', async () => {
-            const manager = await setup(1);
-            await manager.closeTab(1);
-            chrome.tabs.create
-                .mockRejectedValueOnce(new Error('No window with id: 1'))
-                .mockResolvedValueOnce({ id: 900 });
+        test('Undo recreates a window that closed with its tabs, once', async () => {
+            await createManager({
+                tabs: [
+                    createMockTab({ id: 1, windowId: 1, index: 0, url: 'https://keep.example/' }),
+                    createMockTab({ id: 2, windowId: 2, index: 0, url: 'https://a.example/', pinned: true }),
+                    createMockTab({ id: 3, windowId: 2, index: 1, url: 'https://b.example/' }),
+                    createMockTab({ id: 4, windowId: 2, index: 2, url: 'https://c.example/' })
+                ],
+                windows: [createMockWindow({ id: 1, focused: true }), createMockWindow({ id: 2 })]
+            });
+            document.querySelectorAll('.tab-group-actions .btn-danger')[1].click();
+            await flush();
+            expect(chrome.tabs.remove).toHaveBeenCalledWith([2, 3, 4]);
+
+            // Window 2 is gone, so creating a tab in it is refused
+            chrome.tabs.create.mockImplementation(async ({ windowId }) => {
+                if (windowId === 2) {
+                    throw new Error('No window with id: 2');
+                }
+                return { id: 900 };
+            });
+            chrome.windows.create.mockResolvedValue({ id: 50, tabs: [{ id: 950 }] });
 
             undoButton().click();
             await flush();
 
-            expect(chrome.tabs.create).toHaveBeenLastCalledWith(
-                { url: 'https://example.com/1', pinned: false, active: false });
-            expect(document.getElementById('status-message').textContent).toContain('1 tabs reopened');
+            expect(chrome.windows.create).toHaveBeenCalledTimes(1);
+            expect(chrome.windows.create).toHaveBeenCalledWith({ url: 'https://a.example/', focused: false });
+            expect(chrome.tabs.update).toHaveBeenCalledWith(950, { pinned: true });
+            // Only the first tab probes the old window; the rest follow the new one
+            expect(chrome.tabs.create.mock.calls.map(([opts]) => [opts.url, opts.windowId])).toEqual([
+                ['https://a.example/', 2],
+                ['https://b.example/', 50],
+                ['https://c.example/', 50]
+            ]);
+            expect(document.getElementById('status-message').textContent).toContain('3 tabs reopened');
+        });
+
+        test('Undo reports honestly when a closed tab had no URL to reopen', async () => {
+            const manager = await createManager({
+                tabs: [
+                    createMockTab({ id: 1, index: 0, url: 'https://a.example/' }),
+                    createMockTab({ id: 2, index: 1, url: '' })
+                ],
+                windows: [createMockWindow({ id: 1, focused: true })]
+            });
+            manager.toggleTabSelection(1);
+            manager.toggleTabSelection(2);
+            await manager.closeSelectedTabs();
+
+            undoButton().click();
+            await flush();
+
+            expect(chrome.tabs.create).toHaveBeenCalledTimes(1);
+            const status = document.getElementById('status-message');
+            expect(status.textContent).toContain('1 of 2 tabs reopened');
+            expect(status.classList.contains('warning')).toBe(true);
+        });
+
+        test('clicking Undo keeps keyboard focus in the page', async () => {
+            const manager = await setup(1);
+            await manager.closeTab(1);
+
+            undoButton().focus();
+            undoButton().click();
+            await flush();
+
+            expect(document.activeElement).toBe(document.getElementById('tabs-container'));
+            expect(document.getElementById('status-message').textContent).toContain('1 tab reopened');
         });
 
         test('Undo is withdrawn by the next message and when the message hides', async () => {
@@ -524,18 +622,30 @@ describe('TabManager', () => {
             expect(undoButton().onclick).toBeNull();
         });
 
-        test('a message offering Undo stays up longer than a plain one', async () => {
+        test('a message offering Undo stays up longer, and waits while hovered or focused', async () => {
+            const manager = await setup(1);
+            const status = document.getElementById('status-message');
+            const hidden = () => status.classList.contains('hidden');
             jest.useFakeTimers();
             try {
-                document.body.innerHTML = bodyHtml;
-                chrome.tabs.getCurrent.mockResolvedValue(undefined);
-                const manager = new TabManager();
                 manager.showStatusMessage('Closed', 'success', { label: 'Undo', handler: () => {} });
-
                 jest.advanceTimersByTime(9000);
-                expect(document.getElementById('status-message').classList.contains('hidden')).toBe(false);
+                expect(hidden()).toBe(false);
                 jest.advanceTimersByTime(1500);
-                expect(document.getElementById('status-message').classList.contains('hidden')).toBe(true);
+                expect(hidden()).toBe(true);
+
+                manager.showStatusMessage('Closed', 'success', { label: 'Undo', handler: () => {} });
+                status.dispatchEvent(new window.MouseEvent('mouseenter'));
+                jest.advanceTimersByTime(60000);
+                expect(hidden()).toBe(false);
+                status.dispatchEvent(new window.MouseEvent('mouseleave'));
+                jest.advanceTimersByTime(10500);
+                expect(hidden()).toBe(true);
+
+                manager.showStatusMessage('Closed', 'success', { label: 'Undo', handler: () => {} });
+                undoButton().focus();
+                jest.advanceTimersByTime(60000);
+                expect(hidden()).toBe(false);
             } finally {
                 jest.useRealTimers();
             }
