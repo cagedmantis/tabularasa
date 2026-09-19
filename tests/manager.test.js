@@ -906,6 +906,43 @@ describe('TabManager', () => {
             expect(chrome.tabs.remove).not.toHaveBeenCalled();
         });
 
+        test('page titles are made safe for the dialog', async () => {
+            const hostile = 'Docs\n\n\u2022 Nothing else will be closed\u202E' + 'x'.repeat(200);
+            const manager = await createManager({
+                tabs: [
+                    createMockTab({ id: 1, title: 'Kept', url: 'https://example.com/', lastAccessed: 2 }),
+                    createMockTab({ id: 2, title: hostile, url: 'https://example.com/', lastAccessed: 1 })
+                ]
+            });
+            window.confirm.mockReturnValue(false);
+
+            await manager.closeDuplicateTabs();
+
+            const question = window.confirm.mock.calls[0][0];
+            const lines = question.split('\n');
+            expect(lines).toHaveLength(3);                 // question, blank, one bullet
+            expect(lines[2].length).toBeLessThanOrEqual(82); // bullet + 80 characters
+            expect(question).not.toMatch(/[\u202a-\u202e]/);
+            expect(lines[2].endsWith('\u2026')).toBe(true);
+        });
+
+        test('the hidden-by-filter warning comes before the list', async () => {
+            const manager = await createManager({
+                tabs: [
+                    createMockTab({ id: 1, title: 'Visible copy', url: 'https://example.com/', lastAccessed: 2 }),
+                    createMockTab({ id: 2, title: 'Other copy', url: 'https://example.com/', lastAccessed: 1 })
+                ]
+            });
+            await typeSearch('Visible');
+            window.confirm.mockReturnValue(false);
+
+            await manager.closeDuplicateTabs();
+
+            const question = window.confirm.mock.calls[0][0];
+            expect(question.indexOf('hidden by the current search')).toBeGreaterThan(-1);
+            expect(question.indexOf('hidden by the current search')).toBeLessThan(question.indexOf('\u2022'));
+        });
+
         test('a long duplicate list is summarised', async () => {
             const manager = await createManager({
                 tabs: Array.from({ length: 14 }, (_, i) =>
@@ -1125,6 +1162,39 @@ describe('TabManager', () => {
             await manager.closeDuplicateTabs();
 
             expect(closedIds().sort()).toEqual([1, 2, 3]);
+        });
+
+        test('copies that are each active in their own window fall back to recency', async () => {
+            const manager = await createManager({
+                tabs: [
+                    createMockTab({ id: 1, url, windowId: 1, active: true, lastAccessed: 1000 }),
+                    createMockTab({ id: 2, url, windowId: 2, active: true, lastAccessed: 2000 })
+                ]
+            });
+
+            await manager.closeDuplicateTabs();
+
+            expect(closedIds()).toEqual([1]);
+        });
+
+        test('the manager\'s own tab outranks even a pinned copy', async () => {
+            const manager = await createManager({
+                tabs: [
+                    createMockTab({ id: 1, url, pinned: true, lastAccessed: 9000 }),
+                    createMockTab({ id: 2, url })
+                ],
+                ownTabId: 2
+            });
+
+            await manager.closeDuplicateTabs();
+
+            expect(closedIds()).toEqual([1]);
+        });
+
+        test('a loading tab is listed by its pending URL', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1, title: '', url: '', pendingUrl: 'https://loading.example/page' })] });
+
+            expect(document.querySelector('.tab-url').textContent).toBe('loading.example/page');
         });
 
         test('among equals, keeps the most recently used', async () => {

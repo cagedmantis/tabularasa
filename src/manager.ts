@@ -86,6 +86,7 @@ class TabManager {
 
     // How many tab titles a confirmation lists before summarising the rest.
     private static readonly CONFIRM_LIST_LIMIT = 10;
+    private static readonly DIALOG_LABEL_LIMIT = 80;
 
     private static readonly FALLBACK_FAVICON =
         'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
@@ -1133,21 +1134,40 @@ class TabManager {
      * closes go ahead because they can be undone. Returns the tabs to close,
      * which is empty when the user declined.
      */
+    /**
+     * A tab's title as one short, plain line for a confirm() dialog. Titles
+     * come from web pages: strip control and bidirectional-override
+     * characters (newlines could fake extra dialog lines, overrides could
+     * reorder the text) and cap the length.
+     */
+    private dialogLabel(tab: TabInfo): string {
+        const label = (tab.title || tab.url)
+            // eslint-disable-next-line no-control-regex
+            .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        return label.length > TabManager.DIALOG_LABEL_LIMIT
+            ? `${label.slice(0, TabManager.DIALOG_LABEL_LIMIT - 1)}\u2026`
+            : label;
+    }
+
     private async confirmClose(tabs: TabInfo[], options: { listTabs?: boolean } = {}): Promise<TabInfo[]> {
         const hiddenCount = this.countHidden(tabs.map(tab => tab.id));
         // listTabs is for closes where the program, not the user, picked the
         // tabs: always ask, and show which ones.
         if (options.listTabs || tabs.length >= TabManager.CONFIRM_CLOSE_THRESHOLD || hiddenCount > 0) {
             let question = `Close ${this.plural(tabs.length, 'tab')}?`;
+            // Before the list: Chrome cuts off a long dialog, and this is
+            // the line that must not be the part that goes missing.
+            if (hiddenCount > 0) {
+                question += `\n\n${hiddenCount} of them ${hiddenCount === 1 ? 'is' : 'are'} hidden by the current search or filter.`;
+            }
             if (options.listTabs) {
                 const listed = tabs.slice(0, TabManager.CONFIRM_LIST_LIMIT);
-                question += '\n\n' + listed.map(tab => `\u2022 ${tab.title || tab.url}`).join('\n');
+                question += '\n\n' + listed.map(tab => `\u2022 ${this.dialogLabel(tab)}`).join('\n');
                 if (tabs.length > listed.length) {
                     question += `\n\u2026 and ${tabs.length - listed.length} more`;
                 }
-            }
-            if (hiddenCount > 0) {
-                question += `\n\n${hiddenCount} of them ${hiddenCount === 1 ? 'is' : 'are'} hidden by the current search or filter.`;
             }
             if (!window.confirm(question)) {
                 // Also reached, silently, if the user told Chrome to stop
