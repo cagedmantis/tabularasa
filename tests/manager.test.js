@@ -18,10 +18,15 @@ const TabManager = window.TabManager;
 
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 
-async function createManager({ tabs = [], windows = [], groups = [], sessions = [] } = {}) {
+async function createManager({ tabs = [], windows = [], groups = [], sessions = [], ownTabId } = {}) {
     document.body.innerHTML = bodyHtml;
 
     chrome.tabs.query.mockResolvedValue(tabs);
+    if (ownTabId instanceof Error) {
+        chrome.tabs.getCurrent.mockRejectedValue(ownTabId);
+    } else {
+        chrome.tabs.getCurrent.mockResolvedValue(ownTabId === undefined ? undefined : { id: ownTabId });
+    }
     chrome.windows.getAll.mockResolvedValue(windows);
     chrome.tabGroups.query.mockResolvedValue(groups);
     chrome.storage.local.get.mockResolvedValue({ sessions });
@@ -265,6 +270,137 @@ describe('TabManager', () => {
 
             document.body.dispatchEvent(ctrlA());
             expect(document.getElementById('selected-count').textContent).toBe('2 selected');
+        });
+    });
+
+    describe('the manager\'s own tab', () => {
+        const manyTabs = () => Array.from({ length: 25 }, (_, i) =>
+            createMockTab({ id: i + 1, url: `https://example.com/${i + 1}` }));
+
+        test('Close All closes the bucket in one call and spares the manager tab', async () => {
+            await createManager({
+                tabs: manyTabs(),
+                windows: [createMockWindow({ id: 1, focused: true })],
+                ownTabId: 3
+            });
+
+            document.querySelector('.tab-group-actions .btn-danger').click();
+            await flush();
+
+            expect(chrome.tabs.remove).toHaveBeenCalledTimes(1);
+            const closed = chrome.tabs.remove.mock.calls[0][0];
+            expect(closed).toHaveLength(24);
+            expect(closed).not.toContain(3);
+        });
+
+        test('Close All on a bucket holding only the manager tab closes nothing', async () => {
+            await createManager({
+                tabs: [createMockTab({ id: 3 })],
+                windows: [createMockWindow({ id: 1, focused: true })],
+                ownTabId: 3
+            });
+
+            document.querySelector('.tab-group-actions .btn-danger').click();
+            await flush();
+
+            expect(chrome.tabs.remove).not.toHaveBeenCalled();
+        });
+
+        test('Close All refreshes the list even when the close is rejected', async () => {
+            await createManager({
+                tabs: [createMockTab({ id: 1 }), createMockTab({ id: 2 })],
+                windows: [createMockWindow({ id: 1, focused: true })]
+            });
+            chrome.tabs.remove.mockRejectedValueOnce(new Error('No tab with id: 2'));
+            chrome.tabs.query.mockResolvedValue([]);
+
+            document.querySelector('.tab-group-actions .btn-danger').click();
+            await flush();
+
+            expect(chrome.tabs.remove).toHaveBeenCalledTimes(1);
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(0);
+            expect(document.getElementById('status-message').classList.contains('warning')).toBe(true);
+        });
+
+        test('Close All reports a failed refresh instead of rejecting', async () => {
+            await createManager({
+                tabs: [createMockTab({ id: 1 })],
+                windows: [createMockWindow({ id: 1, focused: true })]
+            });
+            chrome.tabs.query.mockRejectedValue(new Error('query failed'));
+
+            document.querySelector('.tab-group-actions .btn-danger').click();
+            await flush();
+
+            expect(document.getElementById('status-message').classList.contains('error')).toBe(true);
+        });
+
+        test('Close All still closes everything in one call when the own tab is unknown', async () => {
+            await createManager({
+                tabs: manyTabs(),
+                windows: [createMockWindow({ id: 1, focused: true })]
+            });
+
+            document.querySelector('.tab-group-actions .btn-danger').click();
+            await flush();
+
+            expect(chrome.tabs.remove).toHaveBeenCalledTimes(1);
+            expect(chrome.tabs.remove.mock.calls[0][0]).toHaveLength(25);
+        });
+
+        test('cannot be selected, individually or via select all', async () => {
+            const manager = await createManager({
+                tabs: [createMockTab({ id: 1 }), createMockTab({ id: 2 }), createMockTab({ id: 3 })],
+                windows: [createMockWindow({ id: 1, focused: true })],
+                ownTabId: 3
+            });
+
+            const ownRow = document.querySelector('[data-tab-id="3"]');
+            expect(ownRow.querySelector('.tab-checkbox').disabled).toBe(true);
+            expect(ownRow.querySelector('.tab-checkbox').getAttribute('aria-label')).toMatch(/cannot be selected/);
+            expect(ownRow.querySelector('.tab-own-badge').textContent).toBe('This tab');
+            expect(document.querySelectorAll('.tab-own-badge')).toHaveLength(1);
+            expect(document.querySelector('[data-tab-id="1"] .tab-checkbox').disabled).toBe(false);
+
+            manager.toggleTabSelection(3);
+            expect(document.getElementById('selected-count').textContent).toBe('0 selected');
+
+            document.getElementById('select-all').click();
+            expect(document.getElementById('selected-count').textContent).toBe('2 selected');
+
+            document.getElementById('deselect-all').click();
+            document.querySelector('.tab-group-actions .btn-secondary').click();
+            expect(document.getElementById('selected-count').textContent).toBe('2 selected');
+
+            await manager.closeSelectedTabs();
+            expect(chrome.tabs.remove).toHaveBeenCalledWith([1, 2]);
+        });
+
+        test('closeDuplicateTabs never closes the manager tab', async () => {
+            const url = 'chrome-extension://test-extension-id/manager.html';
+            const manager = await createManager({
+                tabs: [
+                    createMockTab({ id: 1, url, lastAccessed: 3000 }),
+                    createMockTab({ id: 2, url, lastAccessed: 1000 })
+                ],
+                ownTabId: 2
+            });
+
+            await manager.closeDuplicateTabs();
+
+            expect(chrome.tabs.remove).toHaveBeenCalledTimes(1);
+            expect(chrome.tabs.remove).toHaveBeenCalledWith(1);
+        });
+
+        test('still works when the own tab cannot be resolved', async () => {
+            const manager = await createManager({
+                tabs: [createMockTab({ id: 1 })],
+                ownTabId: new Error('unavailable')
+            });
+
+            expect(document.querySelectorAll('.tab-item')).toHaveLength(1);
+            manager.toggleTabSelection(1);
+            expect(document.getElementById('selected-count').textContent).toBe('1 selected');
         });
     });
 
@@ -736,6 +872,26 @@ describe('TabManager', () => {
             const status = document.getElementById('status-message');
             expect(status.textContent).toContain('2 tabs that cannot be restored were left out');
             expect(status.classList.contains('warning')).toBe(true);
+        });
+
+        test('the manager\'s own tab being left out of a save is not worth a warning', async () => {
+            const manager = await createManager({ ownTabId: 2 });
+            chrome.windows.getCurrent.mockResolvedValue(createMockWindow({
+                id: 1,
+                tabs: [
+                    createMockTab({ id: 1, url: 'https://a.com/' }),
+                    createMockTab({ id: 2, url: 'chrome-extension://test-extension-id/manager.html' })
+                ]
+            }));
+            document.getElementById('session-name').value = 'Mine';
+
+            await manager.saveSession();
+
+            const saved = chrome.storage.local.set.mock.calls[0][0].sessions[0];
+            expect(saved.windows[0].tabs.map(tab => tab.url)).toEqual(['https://a.com/']);
+            const status = document.getElementById('status-message');
+            expect(status.textContent).toContain('Session saved successfully');
+            expect(status.classList.contains('warning')).toBe(false);
         });
 
         test('saving a window with nothing restorable saves no session', async () => {
