@@ -601,7 +601,8 @@ describe('TabManager', () => {
         test('windows are fetched without their tabs', async () => {
             await createManager({ tabs: threeTabs() });
 
-            expect(chrome.windows.getAll).toHaveBeenCalledWith();
+            expect(chrome.windows.getAll).toHaveBeenCalledTimes(1);
+            expect(chrome.windows.getAll.mock.calls[0][0]).not.toHaveProperty('populate');
         });
 
         test('equal-sized sections keep a stable order', async () => {
@@ -1609,6 +1610,175 @@ describe('TabManager', () => {
 
             expect(chrome.storage.local.set).toHaveBeenCalledWith({ sessions: [] });
             expect(document.querySelector('#sessions-list .empty-state')).not.toBeNull();
+        });
+    });
+
+    describe('bulk operations on mixed selections', () => {
+        const mixed = () => createManager({
+            tabs: [
+                createMockTab({ id: 1, windowId: 1, index: 0, pinned: true }),
+                createMockTab({ id: 2, windowId: 1, index: 1 }),
+                createMockTab({ id: 3, windowId: 1, index: 2 }),
+                createMockTab({ id: 4, windowId: 2, index: 0 }),
+                createMockTab({ id: 5, windowId: 3, index: 0 })
+            ],
+            windows: [
+                createMockWindow({ id: 1, focused: true }),
+                createMockWindow({ id: 2 }),
+                createMockWindow({ id: 3, type: 'popup' })
+            ]
+        });
+        const select = (manager, ...ids) => ids.forEach(id => manager.toggleTabSelection(id));
+        const status = () => document.getElementById('status-message');
+
+        test('grouping makes one group per window, in place', async () => {
+            const manager = await mixed();
+            select(manager, 4, 3, 2); // ticked out of order
+            document.getElementById('group-name').value = 'Work';
+            chrome.tabs.group.mockResolvedValueOnce(71).mockResolvedValueOnce(72);
+
+            await manager.confirmGroupCreation();
+
+            expect(chrome.tabs.group.mock.calls.map(([opts]) => opts)).toEqual([
+                { tabIds: [2, 3], createProperties: { windowId: 1 } },
+                { tabIds: [4], createProperties: { windowId: 2 } }
+            ]);
+            expect(chrome.tabGroups.update).toHaveBeenCalledWith(71, { title: 'Work', color: 'grey' });
+            expect(chrome.tabGroups.update).toHaveBeenCalledWith(72, { title: 'Work', color: 'grey' });
+            expect(status().textContent).toContain('Created 2 groups named Work (one per window) with 3 tabs');
+        });
+
+        test('grouping leaves pinned tabs and popup-window tabs out, and says so', async () => {
+            const manager = await mixed();
+            select(manager, 1, 2, 5);
+
+            await manager.confirmGroupCreation();
+
+            expect(chrome.tabs.group).toHaveBeenCalledTimes(1);
+            expect(chrome.tabs.group).toHaveBeenCalledWith({ tabIds: [2], createProperties: { windowId: 1 } });
+            expect(status().textContent).toContain('Created group Untitled with 1 tab; 2 pinned or app-window tabs left out');
+            expect(status().classList.contains('warning')).toBe(true);
+        });
+
+        test('grouping with nothing groupable explains why and keeps the selection', async () => {
+            const manager = await mixed();
+            select(manager, 1, 5);
+
+            await manager.confirmGroupCreation();
+
+            expect(chrome.tabs.group).not.toHaveBeenCalled();
+            expect(status().textContent).toContain('cannot be grouped');
+            expect(document.getElementById('selected-count').textContent).toBe('2 selected');
+        });
+
+        test('a window whose group fails does not stop the other windows', async () => {
+            const manager = await mixed();
+            select(manager, 2, 4);
+            chrome.tabs.group.mockRejectedValueOnce(new Error('No tab with id: 2')).mockResolvedValueOnce(72);
+
+            await manager.confirmGroupCreation();
+
+            expect(chrome.tabGroups.update).toHaveBeenCalledTimes(1);
+            expect(status().textContent).toContain('1 tab could not be grouped');
+            // What failed stays selected so it can be retried
+            expect(Array.from(manager.selectedTabs)).toEqual([2]);
+        });
+
+        test('asks Chrome for windows of every type, so app and devtools windows are recognised', async () => {
+            const manager = await createManager({
+                tabs: [
+                    createMockTab({ id: 1, windowId: 1, index: 0 }),
+                    createMockTab({ id: 2, windowId: 7, index: 0 }),
+                    createMockTab({ id: 3, windowId: 8, index: 0 })
+                ],
+                windows: [
+                    createMockWindow({ id: 1, focused: true }),
+                    createMockWindow({ id: 7, type: 'devtools' }),
+                    createMockWindow({ id: 8, type: 'app' })
+                ]
+            });
+            // windows.getAll leaves app and devtools windows out by default
+            expect(chrome.windows.getAll.mock.calls[0][0].windowTypes)
+                .toEqual(expect.arrayContaining(['normal', 'popup', 'app', 'devtools']));
+
+            select(manager, 1, 2, 3);
+            await manager.moveToNewWindow();
+
+            expect(chrome.windows.create).toHaveBeenCalledWith({ tabId: 1 });
+            expect(chrome.tabs.move).not.toHaveBeenCalled();
+            expect(status().textContent).toContain('1 tab moved to new window; 2 tabs in popup or app windows left in place');
+        });
+
+        test('a group that is created but cannot be named still counts as grouped', async () => {
+            const manager = await mixed();
+            select(manager, 2, 3);
+            chrome.tabGroups.update.mockRejectedValue(new Error('No group with id'));
+
+            await manager.confirmGroupCreation();
+
+            expect(status().textContent).toContain('with 2 tabs');
+            expect(status().textContent).not.toContain('could not be grouped');
+            expect(manager.selectedTabs.size).toBe(0);
+        });
+
+        test('a tab in a window opened since the last refresh is attempted, not skipped', async () => {
+            const manager = await createManager({
+                tabs: [createMockTab({ id: 1, windowId: 42, index: 0 })],
+                windows: []
+            });
+            select(manager, 1);
+
+            await manager.confirmGroupCreation();
+
+            expect(chrome.tabs.group).toHaveBeenCalledWith({ tabIds: [1], createProperties: { windowId: 42 } });
+        });
+
+        test('when every group fails, the list is refreshed and the error shown', async () => {
+            const manager = await mixed();
+            select(manager, 2);
+            chrome.tabs.group.mockRejectedValue(new Error('No tab with id: 2'));
+            chrome.tabs.query.mockClear();
+
+            await manager.confirmGroupCreation();
+
+            expect(status().classList.contains('error')).toBe(true);
+            expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
+        });
+
+        test('moving keeps tab-strip order and leaves popup-window tabs in place', async () => {
+            const manager = await mixed();
+            select(manager, 5, 4, 3, 2);
+
+            await manager.moveToNewWindow();
+
+            expect(chrome.windows.create).toHaveBeenCalledWith({ tabId: 2 });
+            expect(chrome.tabs.move).toHaveBeenCalledWith([3, 4], { windowId: 99, index: -1 });
+            expect(status().textContent).toContain('3 tabs moved to new window; 1 tab in popup or app windows left in place');
+        });
+
+        test('a failed move refreshes the list', async () => {
+            const manager = await mixed();
+            select(manager, 2, 3);
+            chrome.tabs.move.mockRejectedValue(new Error('No tab with id: 3'));
+            chrome.tabs.query.mockClear();
+
+            await manager.moveToNewWindow();
+
+            expect(status().textContent).toContain('Not every tab could be moved');
+            expect(status().classList.contains('error')).toBe(true);
+            expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
+        });
+
+        test('a failed ungroup refreshes the list', async () => {
+            const manager = await mixed();
+            select(manager, 2);
+            chrome.tabs.ungroup.mockRejectedValue(new Error('No tab with id: 2'));
+            chrome.tabs.query.mockClear();
+
+            await manager.ungroupSelectedTabs();
+
+            expect(status().classList.contains('error')).toBe(true);
+            expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
         });
     });
 

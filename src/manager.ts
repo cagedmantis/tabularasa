@@ -319,7 +319,9 @@ class TabManager {
                 chrome.tabs.query({}),
                 // Window metadata only: tabs.query already returns every tab,
                 // so populating the windows would transfer them all twice.
-                chrome.windows.getAll(),
+                // Every type is asked for: the default leaves out app and
+                // devtools windows, whose tabs tabs.query still returns.
+                chrome.windows.getAll({ windowTypes: ['normal', 'popup', 'panel', 'app', 'devtools'] }),
                 this.queryTabGroups()
             ]);
         } catch (error) {
@@ -1209,11 +1211,7 @@ class TabManager {
             this.showStatusMessage(`${reopened} of ${this.plural(closedTabs.length, 'tab')} reopened`, 'warning');
         }
 
-        try {
-            await this.refreshTabs();
-        } catch (error) {
-            console.error('Error refreshing tabs:', error);
-        }
+        await this.refreshSafely();
     }
 
     // Tab operations
@@ -1334,25 +1332,66 @@ class TabManager {
         }
     }
 
+    // Selected tabs ordered by window, then position in the tab strip, so
+    // bulk operations keep each window's left-to-right order rather than
+    // the order the boxes were ticked in.
+    private getSelectedTabs(): TabInfo[] {
+        return this.tabs
+            .filter(tab => this.selectedTabs.has(tab.id))
+            .sort((a, b) => a.windowId - b.windowId || a.index - b.index);
+    }
+
+    // Tabs of popup, app and devtools windows cannot be grouped or moved.
+    // this.windows holds windows of every type, so a window missing from it
+    // is one that opened since the last refresh; assume normal and let
+    // Chrome reject it otherwise.
+    private isInNormalWindow(tab: TabInfo): boolean {
+        const window = this.windows.find(w => w.id === tab.windowId);
+        return (window?.type ?? 'normal') === 'normal';
+    }
+
+    // A refresh that reports its own failure. Used where a bulk operation
+    // may have rejected part-way: the list must show what really happened
+    // rather than stay as it was, and must not mask the operation's error.
+    private async refreshSafely(): Promise<void> {
+        try {
+            await this.refreshTabs();
+        } catch (error) {
+            console.error('Error refreshing tabs:', error);
+        }
+    }
+
     private async moveToNewWindow(): Promise<void> {
         if (this.selectedTabs.size === 0) {return;}
 
+        const selected = this.getSelectedTabs();
+        const movable = selected.filter(tab => this.isInNormalWindow(tab));
+        const leftOut = selected.length - movable.length;
+        if (movable.length === 0) {
+            this.showStatusMessage('Tabs of popup and app windows cannot be moved', 'error');
+            return;
+        }
+
         try {
-            const tabIds = Array.from(this.selectedTabs);
-            const firstTabId = tabIds[0];
-            
-            const newWindow = await chrome.windows.create({ tabId: firstTabId });
-            
-            if (tabIds.length > 1) {
-                await chrome.tabs.move(tabIds.slice(1), { windowId: newWindow.id!, index: -1 });
+            const [first, ...rest] = movable.map(tab => tab.id);
+            const newWindow = await chrome.windows.create({ tabId: first });
+            if (rest.length > 0) {
+                await chrome.tabs.move(rest, { windowId: newWindow.id!, index: -1 });
             }
 
             this.selectedTabs.clear();
-            this.showStatusMessage(`${tabIds.length} tabs moved to new window`);
+            const moved = `${this.plural(movable.length, 'tab')} moved to new window`;
+            if (leftOut === 0) {
+                this.showStatusMessage(moved);
+            } else {
+                this.showStatusMessage(`${moved}; ${this.plural(leftOut, 'tab')} in popup or app windows left in place`, 'warning');
+            }
             await this.refreshTabs();
         } catch (error) {
+            // The new window may already exist with some of the tabs in it.
             console.error('Error moving tabs to new window:', error);
-            this.showStatusMessage('Error moving tabs to new window', 'error');
+            this.showStatusMessage('Not every tab could be moved to the new window', 'error');
+            await this.refreshSafely();
         }
     }
 
@@ -1448,23 +1487,73 @@ class TabManager {
             return;
         }
 
-        try {
-            const tabIds = Array.from(this.selectedTabs);
-            const groupId = await chrome.tabs.group({ tabIds });
-
-            await chrome.tabGroups.update(groupId, {
-                title: groupName || undefined,
-                color: groupColor
-            });
-
-            this.selectedTabs.clear();
-            this.hideGroupModal();
-            this.showStatusMessage(`Created group ${groupName || 'Untitled'} with ${tabIds.length} tabs`);
-            await this.refreshTabs();
-        } catch (error) {
-            console.error('Error creating tab group:', error);
-            this.showStatusMessage('Error creating tab group', 'error');
+        // Grouping a pinned tab unpins it, and tabs outside normal windows
+        // cannot be grouped at all, so both are left out.
+        const selected = this.getSelectedTabs();
+        const groupable = selected.filter(tab => !tab.pinned && this.isInNormalWindow(tab));
+        const leftOut = selected.length - groupable.length;
+        if (groupable.length === 0) {
+            this.showStatusMessage('Pinned tabs and tabs of popup or app windows cannot be grouped', 'error');
+            return;
         }
+
+        // A group lives in one window. Without an explicit window Chrome
+        // creates it in the current one, dragging every selected tab into
+        // the manager's window, so make one group per window, in place.
+        const byWindow = new Map<number, number[]>();
+        groupable.forEach(tab => {
+            byWindow.set(tab.windowId, [...(byWindow.get(tab.windowId) ?? []), tab.id]);
+        });
+
+        let groupsCreated = 0;
+        const groupedTabIds: number[] = [];
+        for (const [windowId, tabIds] of byWindow) {
+            let groupId: number;
+            try {
+                groupId = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
+            } catch (error) {
+                console.error(`Error creating tab group in window ${windowId}:`, error);
+                continue;
+            }
+            groupsCreated++;
+            groupedTabIds.push(...tabIds);
+
+            try {
+                await chrome.tabGroups.update(groupId, {
+                    title: groupName || undefined,
+                    color: groupColor
+                });
+            } catch (error) {
+                // The tabs are grouped all the same, only unnamed.
+                console.warn(`Could not name the tab group in window ${windowId}:`, error);
+            }
+        }
+
+        if (groupsCreated === 0) {
+            this.showStatusMessage('Error creating tab group', 'error');
+            await this.refreshSafely();
+            return;
+        }
+
+        // Keep what was not grouped selected, so it can be retried or
+        // handled another way.
+        groupedTabIds.forEach(tabId => this.selectedTabs.delete(tabId));
+        this.hideGroupModal();
+
+        const name = groupName || 'Untitled';
+        const notes: string[] = [];
+        if (leftOut > 0) {
+            notes.push(`${this.plural(leftOut, 'pinned or app-window tab')} left out`);
+        }
+        const failed = groupable.length - groupedTabIds.length;
+        if (failed > 0) {
+            notes.push(`${this.plural(failed, 'tab')} could not be grouped`);
+        }
+        const created = groupsCreated === 1
+            ? `Created group ${name} with ${this.plural(groupedTabIds.length, 'tab')}`
+            : `Created ${groupsCreated} groups named ${name} (one per window) with ${this.plural(groupedTabIds.length, 'tab')}`;
+        this.showStatusMessage([created, ...notes].join('; '), notes.length > 0 ? 'warning' : 'success');
+        await this.refreshSafely();
     }
 
     private async ungroupSelectedTabs(): Promise<void> {
@@ -1474,11 +1563,12 @@ class TabManager {
             const tabIds = Array.from(this.selectedTabs);
             await chrome.tabs.ungroup(tabIds);
             this.selectedTabs.clear();
-            this.showStatusMessage(`${tabIds.length} tabs ungrouped`);
+            this.showStatusMessage(`${this.plural(tabIds.length, 'tab')} ungrouped`);
             await this.refreshTabs();
         } catch (error) {
             console.error('Error ungrouping tabs:', error);
             this.showStatusMessage('Error ungrouping tabs', 'error');
+            await this.refreshSafely();
         }
     }
 
