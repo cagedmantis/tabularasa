@@ -508,6 +508,35 @@ describe('TabManager', () => {
             expect(row(2).classList.contains('selected')).toBe(true);
         });
 
+        test('bucket buttons never act on data from before a skipped rebuild', async () => {
+            const group = (id) => ({ id, title: 'Work', color: 'blue', collapsed: false, windowId: 1 });
+            const manager = await createManager({
+                tabs: [createMockTab({ id: 1, groupId: 10, index: 0 })],
+                groups: [group(10)]
+            });
+            document.getElementById('view-toggle').click(); // groups view
+            // The group was recreated: identical to look at, different id
+            chrome.tabs.query.mockResolvedValue([createMockTab({ id: 1, groupId: 11, index: 0 })]);
+            chrome.tabGroups.query.mockResolvedValue([group(11)]);
+            await manager.refreshTabs();
+
+            Array.from(document.querySelectorAll('.tab-group-actions button'))
+                .find(button => button.textContent === 'Collapse').click();
+            await flush();
+
+            expect(chrome.tabGroups.update).toHaveBeenCalledWith(11, { collapsed: true });
+        });
+
+        test('rows of tabs closed while filtered out are forgotten too', async () => {
+            const manager = await createManager({ tabs: threeTabs() });
+            await typeSearch('One');
+            chrome.tabs.query.mockResolvedValue([threeTabs()[0]]); // 2 and 3 closed, list unchanged
+
+            await manager.refreshTabs();
+
+            expect(Array.from(manager.tabRows.keys())).toEqual([1]);
+        });
+
         test('rows of closed tabs are forgotten', async () => {
             const manager = await createManager({ tabs: threeTabs() });
             chrome.tabs.query.mockResolvedValue(threeTabs().slice(0, 2));
