@@ -23,7 +23,6 @@ interface WindowInfo {
     id: number;
     focused: boolean;
     type: string;
-    tabs: TabInfo[];
 }
 
 interface TabGroupInfo {
@@ -83,6 +82,8 @@ class TabManager {
     // Browser events are coalesced into at most one refresh per this window.
     private static readonly REFRESH_DELAY_MS = 150;
 
+    private static readonly SEARCH_DELAY_MS = 100;
+
     private static readonly FALLBACK_FAVICON =
         'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ddd"/></svg>';
 
@@ -96,6 +97,14 @@ class TabManager {
     private filterType: 'all' | 'active' | 'pinned' | 'audible' | 'grouped' = 'all';
     private loading: boolean = false;
     private statusMessageTimer: ReturnType<typeof setTimeout> | null = null;
+    private searchTimer: ReturnType<typeof setTimeout> | null = null;
+    // Rendered rows by tab id, with a signature of the data they show. A
+    // row whose signature is unchanged is reused instead of rebuilt, which
+    // also spares its favicon from being fetched and decoded again.
+    private tabRows: Map<number, { signature: string; element: HTMLElement }> = new Map();
+    // Signature of everything the list last rendered. Most browser events
+    // change nothing that is shown; when it matches, the list is left alone.
+    private renderedListSignature: string | null = null;
     // Every load takes the next generation number, and a snapshot is
     // committed only if it is newer than the last one committed. Loads that
     // finish out of order therefore cannot put an older snapshot on screen,
@@ -140,6 +149,7 @@ class TabManager {
         this.setupBrowserListeners();
         await this.loadInitialData();
         this.render();
+        this.renderSessions();
     }
 
     private setupEventListeners(): void {
@@ -306,7 +316,9 @@ class TabManager {
         try {
             [allTabs, allWindows, tabGroups] = await Promise.all([
                 chrome.tabs.query({}),
-                chrome.windows.getAll({ populate: true }),
+                // Window metadata only: tabs.query already returns every tab,
+                // so populating the windows would transfer them all twice.
+                chrome.windows.getAll(),
                 this.queryTabGroups()
             ]);
         } catch (error) {
@@ -341,8 +353,7 @@ class TabManager {
         this.windows = windows.map(window => ({
             id: window.id!,
             focused: window.focused,
-            type: window.type!,
-            tabs: (window.tabs || []).map(toTabInfo)
+            type: window.type!
         }));
         this.tabGroups = tabGroups;
 
@@ -389,26 +400,122 @@ class TabManager {
             return;
         }
 
+        // Sessions are not rendered here: they change only through session
+        // operations, which render the list themselves.
         this.renderTabs();
-        this.renderSessions();
         this.updateGlobalActions();
         this.updateViewToggle();
         this.updateTabCount();
     }
 
     private renderTabs(): void {
-        const filteredTabs = this.getFilteredTabs();
+        const buckets = this.buildBuckets(this.getFilteredTabs());
+
+        // Leave the DOM alone when nothing shown has changed: a rebuild
+        // blurs and refocuses the focused control, which a screen reader
+        // announces again every time.
+        // Besides what is shown, this covers what the bucket buttons close
+        // over (group id; each tab's window, position and group), so a
+        // skipped rebuild can never leave them acting on outdated data.
+        const listSignature = JSON.stringify(buckets.map(bucket => [
+            bucket.label,
+            bucket.chromeGroup?.id,
+            bucket.chromeGroup?.color,
+            bucket.chromeGroup?.collapsed,
+            bucket.tabs.map(tab => [tab.id, tab.windowId, tab.index, tab.groupId, this.rowSignature(tab)])
+        ]));
+
+        // Forget rows of tabs that no longer exist
+        const existingIds = new Set(this.tabs.map(tab => tab.id));
+        this.tabRows.forEach((_, tabId) => {
+            if (!existingIds.has(tabId)) {
+                this.tabRows.delete(tabId);
+            }
+        });
+
+        if (listSignature === this.renderedListSignature) {
+            this.renderSelection();
+            return;
+        }
+        this.renderedListSignature = listSignature;
+
+        const restoreFocus = this.captureFocus();
 
         this.elements.tabsContainer.innerHTML = '';
 
-        if (filteredTabs.length === 0) {
+        if (buckets.length === 0) {
             this.renderEmptyState();
-            return;
+        } else {
+            buckets.forEach(bucket => {
+                this.elements.tabsContainer.appendChild(this.createTabGroup(bucket));
+            });
         }
 
-        this.buildBuckets(filteredTabs).forEach(bucket => {
-            this.elements.tabsContainer.appendChild(this.createTabGroup(bucket));
+        restoreFocus();
+    }
+
+    /**
+     * Rebuilding the list detaches every row, which drops keyboard focus to
+     * the page body. Remember which control of which tab had focus and
+     * return a function that puts it back after the rebuild.
+     */
+    private captureFocus(): () => void {
+        const focused = document.activeElement;
+        const row = focused?.closest<HTMLElement>('.tab-item');
+        if (!focused || !row || !this.elements.tabsContainer.contains(row)) {
+            return () => undefined;
+        }
+        const tabId = row.dataset.tabId;
+        const controlIndex = Array.from(row.querySelectorAll('input, button')).indexOf(focused);
+
+        return () => {
+            const newRow = this.elements.tabsContainer.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
+            const control = newRow?.querySelectorAll<HTMLElement>('input, button')[controlIndex];
+            // The row is gone when its tab was closed or filtered out; keep
+            // focus in the list rather than letting it fall to the body.
+            (control ?? this.elements.tabsContainer).focus();
+        };
+    }
+
+    /**
+     * Everything a row shows. favIconUrl is not rendered itself (the image
+     * comes from chrome's _favicon cache, keyed by page URL), but it is what
+     * changes when a page's icon becomes known: Chrome reports url, then
+     * title, then favIconUrl, so without it a row built at the title change
+     * would keep the placeholder icon for good.
+     */
+    private rowSignature(tab: TabInfo): string {
+        return JSON.stringify([
+            tab.title, tab.url, tab.favIconUrl, tab.active, tab.pinned, tab.audible,
+            tab.mutedInfo?.muted ?? false, this.isOwnTab(tab.id)
+        ]);
+    }
+
+    private getTabRow(tab: TabInfo): HTMLElement {
+        const signature = this.rowSignature(tab);
+        let row = this.tabRows.get(tab.id);
+        if (!row || row.signature !== signature) {
+            row = { signature, element: this.createTabElement(tab) };
+            this.tabRows.set(tab.id, row);
+        }
+        this.syncRowSelection(row.element, tab.id);
+        return row.element;
+    }
+
+    private syncRowSelection(row: HTMLElement, tabId: number): void {
+        const selected = this.selectedTabs.has(tabId);
+        row.classList.toggle('selected', selected);
+        (row.querySelector('.tab-checkbox') as HTMLInputElement).checked = selected;
+    }
+
+    // Applies a selection change to the rows already on screen, without
+    // rebuilding them.
+    private renderSelection(): void {
+        this.elements.tabsContainer.querySelectorAll<HTMLElement>('.tab-item').forEach(row => {
+            this.syncRowSelection(row, Number(row.dataset.tabId));
         });
+        this.updateGlobalActions();
+        this.updateTabCount();
     }
 
     private getFilteredTabs(): TabInfo[] {
@@ -477,11 +584,12 @@ class TabManager {
         if (this.currentView === 'groups') {
             // Bucket by group id, not title, so groups that share a title
             // stay separate.
+            const groupsById = new Map(this.tabGroups.map(group => [group.id, group]));
             const ungrouped: TabInfo[] = [];
             const byGroup = new Map<number, TabInfo[]>();
             tabs.forEach(tab => {
                 const group = tab.groupId && tab.groupId !== -1
-                    ? this.tabGroups.find(g => g.id === tab.groupId)
+                    ? groupsById.get(tab.groupId)
                     : undefined;
                 if (group) {
                     if (!byGroup.has(group.id)) {
@@ -497,17 +605,15 @@ class TabManager {
             if (ungrouped.length > 0) {
                 buckets.push({ label: 'Ungrouped', tabs: ungrouped });
             }
-            Array.from(byGroup.entries())
-                .sort(([, tabsA], [, tabsB]) => tabsB.length - tabsA.length)
-                .forEach(([groupId, groupTabs]) => {
-                    const chromeGroup = this.tabGroups.find(g => g.id === groupId)!;
-                    buckets.push({
-                        label: chromeGroup.title || `Group ${chromeGroup.id}`,
-                        tabs: groupTabs,
-                        chromeGroup
-                    });
-                });
-            return buckets;
+            const groupBuckets = Array.from(byGroup.entries()).map(([groupId, groupTabs]) => {
+                const chromeGroup = groupsById.get(groupId)!;
+                return {
+                    label: chromeGroup.title || `Group ${chromeGroup.id}`,
+                    tabs: groupTabs,
+                    chromeGroup
+                };
+            });
+            return buckets.concat(groupBuckets.sort(TabManager.compareBuckets));
         }
 
         // Domain view
@@ -525,8 +631,16 @@ class TabManager {
             byDomain.get(domain)!.push(tab);
         });
         return Array.from(byDomain.entries())
-            .sort(([, tabsA], [, tabsB]) => tabsB.length - tabsA.length)
-            .map(([domain, domainTabs]) => ({ label: domain, tabs: domainTabs }));
+            .map(([domain, domainTabs]) => ({ label: domain, tabs: domainTabs }))
+            .sort(TabManager.compareBuckets);
+    }
+
+    // Largest first; ties broken by label (then group id) so that sections
+    // of equal size do not swap places from one render to the next.
+    private static compareBuckets(a: TabBucket, b: TabBucket): number {
+        return b.tabs.length - a.tabs.length
+            || a.label.localeCompare(b.label)
+            || (a.chromeGroup?.id ?? 0) - (b.chromeGroup?.id ?? 0);
     }
 
     private createTabGroup(bucket: TabBucket): HTMLElement {
@@ -608,8 +722,7 @@ class TabManager {
 
         // Group tabs
         tabs.forEach(tab => {
-            const tabElement = this.createTabElement(tab);
-            groupElement.appendChild(tabElement);
+            groupElement.appendChild(this.getTabRow(tab));
         });
 
         return groupElement;
@@ -617,14 +730,14 @@ class TabManager {
 
     private createTabElement(tab: TabInfo): HTMLElement {
         const tabElement = document.createElement('div');
-        tabElement.className = `tab-item ${tab.active ? 'active' : ''} ${this.selectedTabs.has(tab.id) ? 'selected' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.audible ? 'audible' : ''}`;
+        tabElement.className = `tab-item ${tab.active ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.audible ? 'audible' : ''}`;
         tabElement.dataset.tabId = tab.id.toString();
 
         // Create checkbox
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.className = 'tab-checkbox';
-        checkbox.checked = this.selectedTabs.has(tab.id);
+        // Selection state is applied by syncRowSelection so rows can be reused.
         checkbox.setAttribute('aria-label', `Select ${tab.title}`);
         if (this.isOwnTab(tab.id)) {
             checkbox.disabled = true;
@@ -840,11 +953,24 @@ class TabManager {
 
     // Event handlers
     private handleSearch(): void {
+        // The query takes effect at once, so Select All and the "hidden by
+        // filter" checks never act on an older query than the box shows;
+        // only the rebuild waits for typing to pause.
         this.searchQuery = this.elements.searchInput.value.trim();
-        this.render();
+        if (this.searchTimer !== null) {
+            clearTimeout(this.searchTimer);
+        }
+        this.searchTimer = setTimeout(() => {
+            this.searchTimer = null;
+            this.render();
+        }, TabManager.SEARCH_DELAY_MS);
     }
 
     private clearSearch(): void {
+        if (this.searchTimer !== null) {
+            clearTimeout(this.searchTimer);
+            this.searchTimer = null;
+        }
         this.elements.searchInput.value = '';
         this.searchQuery = '';
         this.render();
@@ -899,13 +1025,13 @@ class TabManager {
         } else {
             this.selectedTabs.add(tabId);
         }
-        this.render();
+        this.renderSelection();
     }
 
     private selectAllTabs(): void {
         const filteredTabs = this.getFilteredTabs();
         this.selectTabs(filteredTabs);
-        this.render();
+        this.renderSelection();
     }
 
     private selectTabs(tabs: TabInfo[]): void {
@@ -918,7 +1044,7 @@ class TabManager {
 
     private deselectAllTabs(): void {
         this.selectedTabs.clear();
-        this.render();
+        this.renderSelection();
     }
 
     private updateGlobalActions(): void {
@@ -1132,16 +1258,12 @@ class TabManager {
 
     private selectAllTabsInGroup(tabs: TabInfo[]): void {
         this.selectTabs(tabs);
-        this.updateGlobalActions();
-        this.updateTabCount();
-        this.render();
+        this.renderSelection();
     }
 
     private unselectAllTabsInGroup(tabs: TabInfo[]): void {
         tabs.forEach(tab => this.selectedTabs.delete(tab.id));
-        this.updateGlobalActions();
-        this.updateTabCount();
-        this.render();
+        this.renderSelection();
     }
 
     private async toggleTabPin(tabId: number): Promise<void> {
