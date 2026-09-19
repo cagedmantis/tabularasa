@@ -35,6 +35,12 @@ global.chrome = {
         },
         onAttached: {
             addListener: jest.fn()
+        },
+        onDetached: {
+            addListener: jest.fn()
+        },
+        onReplaced: {
+            addListener: jest.fn()
         }
     },
     tabGroups: {
@@ -48,18 +54,31 @@ global.chrome = {
         },
         onRemoved: {
             addListener: jest.fn()
+        },
+        onMoved: {
+            addListener: jest.fn()
         }
     },
     windows: {
+        WINDOW_ID_NONE: -1,
         getAll: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
         getCurrent: jest.fn(),
+        onCreated: {
+            addListener: jest.fn()
+        },
         onRemoved: {
+            addListener: jest.fn()
+        },
+        onFocusChanged: {
             addListener: jest.fn()
         }
     },
     storage: {
+        onChanged: {
+            addListener: jest.fn()
+        },
         local: {
             get: jest.fn(),
             set: jest.fn(),
@@ -84,6 +103,20 @@ global.chrome = {
         }
     }
 };
+
+// jsdom has no Web Locks API. This fake really serializes callbacks per lock
+// name, like the real one, so tests exercise the same path as Chrome.
+const lockQueues = new Map();
+Object.defineProperty(global.navigator, 'locks', {
+    configurable: true,
+    value: {
+        request: jest.fn((name, callback) => {
+            const run = (lockQueues.get(name) || Promise.resolve()).then(() => callback());
+            lockQueues.set(name, run.catch(() => {}));
+            return run;
+        })
+    }
+});
 
 // Silence console output from the code under test
 global.console = {

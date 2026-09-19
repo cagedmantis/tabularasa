@@ -72,7 +72,7 @@
                 </div>
 
                 <!-- Tabs Container -->
-                <div id="tabs-container" class="tabs-container">
+                <div id="tabs-container" class="tabs-container" tabindex="-1">
                     <!-- Tab groups will be populated here -->
                 </div>
 
@@ -179,8 +179,9 @@
         </div>
 
         <!-- Status Messages -->
-        <div id="status-message" class="status-message hidden">
+        <div id="status-message" class="status-message hidden" role="status">
             <span class="message-text"></span>
+            <button class="status-action btn btn-small hidden" type="button"></button>
             <button class="close-status btn btn-icon">
                 <span class="icon">✕</span>
             </button>
