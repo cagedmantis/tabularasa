@@ -147,6 +147,7 @@ class TabManager {
         // Subscribe before the first load so nothing that happens while it
         // is in flight is missed.
         this.setupBrowserListeners();
+        this.setupStorageListener();
         await this.loadInitialData();
         this.render();
         this.renderSessions();
@@ -378,10 +379,48 @@ class TabManager {
         }
     }
 
+    /**
+     * Applies a change to the sessions as they are in storage now, not as
+     * this page last saw them: another manager page may have saved or
+     * deleted a session since, and writing this.sessions back whole would
+     * silently undo that. Memory is updated only from what was written, so
+     * a failed write leaves the list showing what is really stored.
+     */
+    private async updateStoredSessions(update: (sessions: SessionInfo[]) => SessionInfo[]): Promise<void> {
+        // Manager pages share an origin, so a Web Lock serializes the
+        // read-modify-write across all of them.
+        await navigator.locks.request('tabularasa-sessions', async () => {
+            const stored = await chrome.storage.local.get(['sessions']);
+            const sessions = update(this.asSessions(stored.sessions));
+            await chrome.storage.local.set({ sessions });
+            this.sessions = sessions;
+        });
+    }
+
+    // Anything but an array under the storage key is treated as no sessions,
+    // so damaged storage cannot make every load and save throw.
+    private asSessions(stored: unknown): SessionInfo[] {
+        return Array.isArray(stored) ? stored : [];
+    }
+
+    private isQuotaError(error: unknown): boolean {
+        return /quota/i.test(error instanceof Error ? error.message : String(error));
+    }
+
+    // Keeps the list current when another manager page changes the sessions.
+    private setupStorageListener(): void {
+        chrome.storage.onChanged.addListener((changes, areaName) => {
+            if (areaName === 'local' && changes.sessions) {
+                this.sessions = this.asSessions(changes.sessions.newValue);
+                this.renderSessions();
+            }
+        });
+    }
+
     private async loadSessions(): Promise<void> {
         try {
             const result = await chrome.storage.local.get(['sessions']);
-            this.sessions = result.sessions || [];
+            this.sessions = this.asSessions(result.sessions);
         } catch (error) {
             console.error('Error loading sessions:', error);
             throw error;
@@ -1574,9 +1613,8 @@ class TabManager {
                 return;
             }
 
-            this.sessions.push(session);
-            await chrome.storage.local.set({ sessions: this.sessions });
-            
+            await this.updateStoredSessions(sessions => [...sessions, session]);
+
             this.hideSaveSessionForm();
             this.renderSessions();
             if (leftOut === 0) {
@@ -1591,7 +1629,12 @@ class TabManager {
             }
         } catch (error) {
             console.error('Error saving session:', error);
-            this.showStatusMessage('Error saving session', 'error');
+            this.showStatusMessage(
+                this.isQuotaError(error)
+                    ? 'Storage is full: delete sessions you no longer need, then save again'
+                    : 'Error saving session',
+                'error'
+            );
         }
     }
 
@@ -1725,9 +1768,8 @@ class TabManager {
             if (!window.confirm(`Delete session "${session.name}"? This cannot be undone.`)) {
                 return;
             }
-            this.sessions.splice(sessionIndex, 1);
-            await chrome.storage.local.set({ sessions: this.sessions });
-            
+            await this.updateStoredSessions(sessions => sessions.filter(s => s.id !== sessionId));
+
             this.renderSessions();
             this.showStatusMessage(`Session "${session.name}" deleted`);
         } catch (error) {
