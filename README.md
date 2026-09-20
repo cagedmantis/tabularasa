@@ -1,7 +1,7 @@
 # Tabularasa - An Advanced Chrome Tab and Window Manager
 
 [![CI](https://github.com/cagedmantis/tabularasa/actions/workflows/ci.yml/badge.svg)](https://github.com/cagedmantis/tabularasa/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-4285F4?logo=google-chrome&logoColor=white)](https://chromewebstore.google.com/detail/tabularasa/jogliigjiepbbemjbfefphhknoemhilp)
 
 Tabularasa is a powerful Chrome extension that provides comprehensive tab and window management capabilities. It offers an intuitive interface for organizing, searching, and managing your browsing sessions with advanced features like session saving, duplicate detection, and multi-window operations.
@@ -412,7 +412,7 @@ Enable debug logging by opening Chrome DevTools on the manager tab and the backg
 
 ## License
 
-MIT License - see LICENSE file for details
+Apache License 2.0 - see LICENSE file for details
 
 ## Support
 

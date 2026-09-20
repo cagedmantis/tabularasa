@@ -9,10 +9,9 @@ Transform your browser into a productivity powerhouse with intelligent tab organ
 ## Key Features
 
 ### 🗂️ **Smart Tab Organization**
-- **Domain Grouping**: Automatically organize tabs by website domain for instant clarity
+- **Three Views**: See your tabs grouped by window, by Chrome tab group, or by website domain
 - **Chrome Tab Groups**: Full integration with Chrome's native tab grouping system
 - **Visual Indicators**: Clear highlighting for active, pinned, and audible tabs
-- **Sorting Options**: Sort tabs by most recent, alphabetical, or custom preferences
 
 ### 🔍 **Lightning-Fast Search**
 - **Instant Search**: Find any tab by title or URL in milliseconds
@@ -22,21 +21,21 @@ Transform your browser into a productivity powerhouse with intelligent tab organ
 
 ### ⚡ **Bulk Operations**
 - **Multi-Select**: Select multiple tabs across different domains and windows
-- **Bulk Actions**: Close, pin, mute, or move multiple tabs simultaneously
-- **Smart Grouping**: Create tab groups from selected tabs with custom colors
+- **Bulk Actions**: Close, group, ungroup, or move multiple tabs at once
+- **Smart Grouping**: Create tab groups from selected tabs with a name and color, one group per window
 - **Window Management**: Move tabs between windows or create new windows instantly
 
 ### 💾 **Session Management**
 - **Save Sessions**: Preserve your browsing state with custom session names
-- **Quick Restore**: Restore entire sessions with all tabs and window layouts
+- **Quick Restore**: Reopen a session's windows with their tabs in order, including pinned tabs and tab groups
 - **Selective Saving**: Save current window only or all windows
 - **Session History**: Keep track of multiple saved sessions with timestamps
 
 ### 🧹 **Advanced Cleanup**
-- **Duplicate Detection**: Automatically identify and remove duplicate tabs
+- **Duplicate Detection**: Find tabs open more than once and close the extras, keeping pinned, active, and playing copies; you see the list before anything closes
 - **Bulk Closing**: Close multiple tabs, entire domains, or tab groups at once
-- **Smart Cleanup**: Remove tabs from specific domains or timeframes
-- **Undo Protection**: Confirmation prompts prevent accidental closures
+- **Domain Cleanup**: Close every tab from one website in a click
+- **Undo Protection**: Large closes ask first, and closed tabs can be brought back with Undo
 
 ### 🪟 **Multi-Window Support**
 - **Cross-Window View**: See and manage tabs from all Chrome windows in one place
@@ -73,8 +72,10 @@ Transform your browser into a productivity powerhouse with intelligent tab organ
 ## Privacy & Security
 
 ✅ **100% Local Processing**: All data stays on your device - no external servers
-✅ **No Data Collection**: We don't collect, store, or transmit any personal information
-✅ **Secure Storage**: Session data saved locally using Chrome's secure storage API
+✅ **No Data Collection**: Nothing is collected or transmitted; there are no network requests at all
+✅ **Local Storage Only**: Sessions you save stay in Chrome's local extension storage on your device
+✅ **No Incognito Access**: The extension cannot run in or see incognito windows
+✅ **Minimal Permissions**: No access to page content, no host permissions, no content scripts
 ✅ **No Tracking**: No analytics, no tracking, no third-party integrations
 ✅ **Open Source**: Transparent code that respects your privacy
 
@@ -90,13 +91,11 @@ Transform your browser into a productivity powerhouse with intelligent tab organ
 - Clean, intuitive interface that's easy to learn
 - Keyboard shortcuts for power users
 - Responsive design that works on all screen sizes
-- Consistent with Chrome's design language
 
 ### 🔧 **Reliability**
 - Built with modern web technologies (TypeScript, Manifest V3)
 - Comprehensive error handling and recovery
-- Regular updates and maintenance
-- Extensive testing across Chrome versions
+- Automated tests run against the real extension code on every change
 
 ### 🌟 **Value**
 - Free to use with no hidden costs or premium features
@@ -109,20 +108,19 @@ Transform your browser into a productivity powerhouse with intelligent tab organ
 1. **Install**: Click "Add to Chrome" to install the extension
 2. **Launch**: Click the Tabularasa icon in your Chrome toolbar
 3. **Start Organizing**: The extension automatically detects all your open tabs
-4. **Customize**: Choose between domain or window grouping views
+4. **Pick a View**: Switch between window, tab group, and domain views
 5. **Save Sessions**: Create your first saved session for easy restoration
 
 ## Getting Started
 
 ### First Time Use
-1. Open the extension and explore your current tabs organized by domain
+1. Open the extension and explore your current tabs, grouped by window
 2. Try the search feature to find specific tabs quickly
 3. Select multiple tabs and experiment with bulk operations
 4. Save your current session to experience the restore functionality
-5. Explore the settings to customize your experience
 
 ### Pro Tips
-- Use Ctrl+Click to select multiple tabs across different groups
+- Use the checkboxes, or a section's Select All, to select tabs across windows and domains
 - Create descriptive session names for easy identification
 - Regularly use "Close Duplicates" to clean up redundant tabs
 - Pin frequently used tabs for quick access
@@ -132,13 +130,11 @@ Transform your browser into a productivity powerhouse with intelligent tab organ
 
 We're committed to making Tabularasa the best tab management solution for Chrome. Your feedback helps us improve!
 
-- **Questions?** Check our documentation and FAQ
-- **Found a bug?** Report it through the Chrome Web Store reviews
-- **Feature requests?** Share your ideas in the reviews section
-- **Updates**: We regularly update the extension with new features and improvements
+- **Questions or bugs?** https://github.com/cagedmantis/tabularasa/issues
+- **Feature requests?** Open an issue, or share your ideas in the reviews section
 
 ---
 
 **Transform your browsing experience today. Install Tabularasa and discover the power of organized tab management.**
 
-*Compatible with Chrome 88+ | Manifest V3 | No external dependencies*
+*Requires Chrome 104 or later | Manifest V3 | No external dependencies*

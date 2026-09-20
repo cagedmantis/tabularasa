@@ -104,7 +104,7 @@ Transform your browsing experience with Tabularasa - the ultimate tab management
 
 ### Privacy Policy
 **Status**: ⚠️ REQUIRED if using permissions
-- Extension uses `tabs`, `storage`, `activeTab`, `tabGroups` permissions
+- Extension uses `tabs`, `storage`, `tabGroups`, `favicon` permissions
 - Must create privacy policy explaining data usage
 - Can be simple statement: "All data stays local, no external servers"
 
@@ -127,8 +127,8 @@ All tab management and session data remains on your device and is never shared w
 Be prepared to explain why each permission is needed:
 - `tabs`: Read tab information for management
 - `storage`: Save sessions locally
-- `activeTab`: Switch between tabs
 - `tabGroups`: Manage Chrome tab groups
+- `favicon`: Show tab icons from Chrome's local favicon cache
 
 ## Step 5: Upload Process
 
