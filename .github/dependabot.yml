@@ -1,0 +1,19 @@
+# The extension ships no runtime dependencies, but the build toolchain produces
+# what is published, so it is kept current. Actions are pinned to commits in
+# the workflow; Dependabot moves those pins forward.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      toolchain:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
