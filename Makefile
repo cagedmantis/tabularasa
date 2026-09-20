@@ -8,7 +8,10 @@ EXTENSION_DIR := $(PWD)
 DIST_DIR := $(EXTENSION_DIR)/dist
 ICONS_DIR := $(EXTENSION_DIR)/icons
 CHROME_FLAGS := --load-extension=$(EXTENSION_DIR)
-CHROME_DEV_FLAGS := --user-data-dir=/tmp/chrome-dev-session --disable-web-security --disable-features=VizDisplayCompositor
+# A throwaway profile is all the extension needs. Do not add
+# --disable-web-security: it turns off the same-origin policy for every site
+# opened in that browser, and the extension makes no cross-origin requests.
+CHROME_DEV_FLAGS := --user-data-dir=/tmp/chrome-dev-session
 
 # Default target
 .PHONY: help
@@ -208,12 +211,12 @@ store-prep: build
 .PHONY: validate-manifest
 validate-manifest:
 	@echo "Validating manifest.json..."
-	@python3 -m json.tool manifest.json > /dev/null && echo "✅ Manifest JSON is valid" || echo "❌ Manifest JSON is invalid"
-	@grep -q '"manifest_version": 3' manifest.json && echo "✅ Manifest V3 compliant" || echo "❌ Not Manifest V3 compliant"
-	@grep -q '"name"' manifest.json && echo "✅ Name field present" || echo "❌ Name field missing"
-	@grep -q '"version"' manifest.json && echo "✅ Version field present" || echo "❌ Version field missing"
-	@grep -q '"description"' manifest.json && echo "✅ Description field present" || echo "❌ Description field missing"
-	@grep -q '"icons"' manifest.json && echo "✅ Icons field present" || echo "❌ Icons field missing"
+	@python3 -m json.tool manifest.json > /dev/null && echo "✅ Manifest JSON is valid" || { echo "❌ Manifest JSON is invalid"; exit 1; }
+	@grep -q '"manifest_version": 3' manifest.json && echo "✅ Manifest V3 compliant" || { echo "❌ Not Manifest V3 compliant"; exit 1; }
+	@grep -q '"name"' manifest.json && echo "✅ Name field present" || { echo "❌ Name field missing"; exit 1; }
+	@grep -q '"version"' manifest.json && echo "✅ Version field present" || { echo "❌ Version field missing"; exit 1; }
+	@grep -q '"description"' manifest.json && echo "✅ Description field present" || { echo "❌ Description field missing"; exit 1; }
+	@grep -q '"icons"' manifest.json && echo "✅ Icons field present" || { echo "❌ Icons field missing"; exit 1; }
 
 .PHONY: screenshots
 screenshots:

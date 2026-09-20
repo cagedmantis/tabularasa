@@ -317,8 +317,6 @@ tabularasa/
 ├── tests/                 # Unit tests
 │   ├── manager.test.js    # TabManager behavior tests
 │   ├── background.test.js # Service worker tests
-│   ├── core.test.js       # Core logic tests
-│   ├── utils.test.js      # Utility function tests
 │   ├── jest.config.js     # Jest configuration
 │   └── setup.js           # Test setup and Chrome API mocks
 └── package.json           # Project configuration

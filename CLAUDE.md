@@ -90,8 +90,8 @@ Tabularasa is a Chrome extension that provides advanced tab and window managemen
 ### Current Test Status
 - `tests/manager.test.js` ✅ - Tests the real `TabManager` class (src/manager.ts) against the real manager.html DOM in jsdom
 - `tests/background.test.js` ✅ - Tests the real background service worker (src/background.ts)
-- `tests/core.test.js` ✅ - Core logic tests (self-contained reimplementations)
-- `tests/utils.test.js` ✅ - Utility logic tests (self-contained reimplementations)
+
+Every test exercises the shipped code. Do not add tests that re-implement logic inside the test file: they pass no matter what the extension does. `npm test` collects coverage of `src/` and fails below the floor set in `tests/jest.config.js`.
 
 TypeScript sources are loaded directly in the `.test.js` files via `require('../src/…​.ts')` (transformed by ts-jest); they expose their classes on `window`, so no exports are needed.
 
