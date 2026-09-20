@@ -286,7 +286,7 @@ make docker-zip                                            # container build + h
 With `--docker`, the release host needs only **docker, git, python3, zip, and
 make** (and `gh` for the GitHub release) — no Node, npm, or TypeScript install.
 The image defaults to `node:22-bookworm-slim`; override it with
-`NODE_IMAGE=node:20-bookworm-slim make docker-build`.
+`NODE_IMAGE=node:24-bookworm-slim make docker-build`.
 
 The changelog groups commits by [Conventional Commit](https://www.conventionalcommits.org/)
 type (`feat`, `fix`, `docs`, …) and falls back to a plain bulleted list when the

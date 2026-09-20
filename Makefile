@@ -157,7 +157,7 @@ pack:
 	@echo "Creating distribution package..."
 	@rm -rf dist-package
 	@mkdir -p dist-package/dist dist-package/icons
-	@cp manifest.json manager.html manager.css dist-package/
+	@cp manifest.json manager.html manager.css LICENSE dist-package/
 	@cp $(DIST_DIR)/background.js $(DIST_DIR)/manager.js dist-package/dist/
 	@cp $(ICONS_DIR)/icon-16.png $(ICONS_DIR)/icon-32.png $(ICONS_DIR)/icon-48.png $(ICONS_DIR)/icon-128.png dist-package/icons/
 	@echo "Package created in dist-package/"
@@ -287,7 +287,9 @@ dev: build lint test chrome-dev
 dev-clean: clean build lint test chrome-clean
 
 .PHONY: full-test
-full-test: lint test test-coverage
+# `test` already collects coverage (tests/jest.config.js), so test-coverage
+# would only run the suite a second time.
+full-test: lint test
 
 .PHONY: release-prep
 release-prep: clean install build full-test package

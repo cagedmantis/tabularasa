@@ -2,10 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
     # Every pull request, not only those targeting main, so that stacked
     # pull requests are tested too.
+  schedule:
+    # Weekly, so a new advisory in the toolchain is noticed even when no
+    # one is opening pull requests.
+    - cron: '17 6 * * 1'
 
 # Least privilege: the jobs only read the repository.
 permissions:
@@ -43,6 +47,21 @@ jobs:
     # Collects coverage and enforces the floor in tests/jest.config.js.
     - name: Run tests
       run: npm test
+
+  # Its own job: a newly published advisory has nothing to do with the change
+  # under test, so it must not turn the test job red. It still shows up on the
+  # pull request, and runs weekly on its own.
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Setup Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: '22.x'
 
     - name: Audit dependencies
       run: npm audit --audit-level=high
