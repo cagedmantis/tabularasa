@@ -7,7 +7,7 @@
 # node_modules lives in a throwaway anonymous volume so it never lands on the
 # host. Files written to the mount are owned by the invoking host user.
 #
-# Override the image with NODE_IMAGE, e.g. NODE_IMAGE=node:20-bookworm-slim.
+# Override the image with NODE_IMAGE, e.g. NODE_IMAGE=node:24-bookworm-slim.
 set -eu
 
 _dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)

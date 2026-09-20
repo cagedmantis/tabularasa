@@ -21,6 +21,16 @@ module.exports = {
     collectCoverageFrom: [
         '<rootDir>/src/**/*.ts'
     ],
+    // A floor a little under what the suite reaches today, so coverage of
+    // the shipped code cannot quietly erode. Raise it as coverage grows.
+    coverageThreshold: {
+        global: {
+            statements: 82,
+            branches: 72,
+            functions: 78,
+            lines: 84
+        }
+    },
 
     // Module paths
     moduleFileExtensions: ['js', 'json', 'ts'],
