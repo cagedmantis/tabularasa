@@ -50,30 +50,10 @@ make zip
 The current description "An advanced Chrome Tab and Window Manager" is too brief.
 
 ### Required: Enhanced Description
-Create a comprehensive description following this format:
-
-```markdown
-**Tabularasa** is a powerful Chrome extension that transforms how you manage your browser tabs and windows. Say goodbye to tab chaos and hello to organized browsing.
-
-**Key Features:**
-• **Smart Tab Organization**: Group tabs by domain or Chrome tab groups
-• **Advanced Search**: Quickly find tabs by title or URL
-• **Bulk Operations**: Select multiple tabs for closing, moving, or grouping
-• **Session Management**: Save and restore browsing sessions
-• **Duplicate Detection**: Automatically identify and remove duplicate tabs
-• **Cross-Window Management**: Move tabs between windows effortlessly
-• **Real-Time Updates**: Live tab count and status indicators
-
-**Perfect For:**
-- Power users with many open tabs
-- Researchers managing multiple projects
-- Developers working across multiple repositories
-- Anyone who wants better browser organization
-
-**Privacy-Focused**: All data stays local on your device. No external servers or data collection.
-
-Transform your browsing experience with Tabularasa - the ultimate tab management solution.
-```
+The listing description lives in one place: the "Enhanced Description" section of
+`CHROME_STORE_DESCRIPTION.md`. Paste it from there. Do not keep a second copy here;
+a second copy is how the listing once came to advertise features that did not exist.
+Every feature it names must exist in the version being uploaded.
 
 ## Step 3: Create Required Visual Assets
 
@@ -104,31 +84,21 @@ Transform your browsing experience with Tabularasa - the ultimate tab management
 
 ### Privacy Policy
 **Status**: ⚠️ REQUIRED if using permissions
-- Extension uses `tabs`, `storage`, `activeTab`, `tabGroups` permissions
+- Extension uses `tabs`, `storage`, `tabGroups`, `favicon` permissions
 - Must create privacy policy explaining data usage
-- Can be simple statement: "All data stays local, no external servers"
 
-### Example Privacy Policy
-```markdown
-# Tabularasa Privacy Policy
-
-Tabularasa is committed to protecting your privacy. This extension:
-
-- Operates entirely locally on your device
-- Does not collect any personal information
-- Does not transmit data to external servers
-- Only accesses tab information to provide functionality
-- Stores session data locally using Chrome's storage API
-
-All tab management and session data remains on your device and is never shared with third parties.
-```
+### Privacy policy text
+The policy is `PRIVACY_POLICY.md`; the dashboard answers (data usage, permission
+justifications, single purpose) are in `STORE_SUBMISSION.md`. Do not paraphrase them
+here. In particular the data-usage answer is **Web history**, not "none": storing tab
+URLs locally still counts as handling user data.
 
 ### Permissions Justification
 Be prepared to explain why each permission is needed:
 - `tabs`: Read tab information for management
 - `storage`: Save sessions locally
-- `activeTab`: Switch between tabs
 - `tabGroups`: Manage Chrome tab groups
+- `favicon`: Show tab icons from Chrome's local favicon cache
 
 ## Step 5: Upload Process
 
