@@ -1,0 +1,27 @@
+# The extension ships no runtime dependencies, but the build toolchain produces
+# what is published, so it is kept current. Actions are pinned to commits in
+# the workflow; Dependabot moves those pins forward.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Wait a week before proposing a new release: a compromised compiler or
+    # Babel release is the realistic way into this extension, and a week lets
+    # a bad publish be caught. Security updates are not delayed.
+    cooldown:
+      default-days: 7
+    groups:
+      toolchain:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
