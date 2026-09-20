@@ -8,6 +8,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Wait a week before proposing a new release: a compromised compiler or
+    # Babel release is the realistic way into this extension, and a week lets
+    # a bad publish be caught. Security updates are not delayed.
+    cooldown:
+      default-days: 7
     groups:
       toolchain:
         patterns: ["*"]
@@ -17,3 +22,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
