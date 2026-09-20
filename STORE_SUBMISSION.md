@@ -63,12 +63,17 @@ list in `manifest.json`; the listing and `PRIVACY_POLICY.md` must name the same 
 
 ### Data usage
 
-- Check **none** of the data collection categories — the extension transmits nothing
-  off-device, and the developer receives no user data. (Sessions the user saves contain
-  tab URLs and titles, but they stay in `chrome.storage.local` on the user's device;
-  the privacy policy describes this.)
-- Certify the disclosures: no sale of data, no use unrelated to the single purpose,
-  no use for creditworthiness.
+- Tick **Web history** (the pages a user has visited, with associated data such as the
+  title). Tabularasa reads the URLs and titles of open tabs and stores them in sessions
+  the user saves. The Chrome Web Store User Data FAQ says extensions must disclose how
+  they handle user data "even when data is processed or stored locally on a user's
+  device and is not transmitted", and counts URLs as web browsing activity. With nothing
+  ticked, the listing would state that the developer does not collect or use your data,
+  next to a privacy policy that says sessions are a form of browsing history.
+- Tick nothing else: no page content, no user-activity monitoring, no personally
+  identifiable, authentication, financial, health, communication or location data.
+- Certify all three statements: no sale or transfer of data to third parties, no use
+  unrelated to the single purpose, no use for creditworthiness or lending.
 
 ### Privacy policy URL
 

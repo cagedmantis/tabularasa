@@ -43,6 +43,32 @@ describe('published documents match the manifest', () => {
         });
     });
 
+    test('the store submission quotes the manifest description', () => {
+        expect(read('STORE_SUBMISSION.md')).toContain(manifest.description);
+    });
+
+    test('the guide lists exactly the permissions requested', () => {
+        const section = read('CHROME_STORE_GUIDE.md')
+            .split('### Permissions Justification')[1]
+            .split('## Step 5')[0];
+        const listed = Array.from(section.matchAll(/^- `([A-Za-z]+)`:/gm))
+            .map(match => match[1])
+            .sort();
+
+        expect(listed).toEqual(permissions);
+    });
+
+    test('the privacy policy keeps the statements the store requires', () => {
+        const policy = read('PRIVACY_POLICY.md');
+
+        // Affirmative Limited Use statement (Chrome Web Store User Data Policy)
+        expect(policy).toContain('adheres to the Chrome Web Store User Data Policy, including the Limited Use requirements');
+        // Claims that were once made and are false
+        expect(policy).not.toMatch(/is encrypted|built-in encryption|no vulnerabilities/i);
+        // The dashboard answer must not regress to "none"
+        expect(read('STORE_SUBMISSION.md')).toContain('Tick **Web history**');
+    });
+
     test('documents state the Chrome version the manifest requires', () => {
         const minimum = manifest.minimum_chrome_version;
 

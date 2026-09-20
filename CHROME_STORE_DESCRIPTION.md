@@ -4,7 +4,7 @@
 
 **Tabularasa** is a powerful Chrome extension that revolutionizes how you manage browser tabs and windows. Say goodbye to tab chaos and hello to organized, productive browsing.
 
-Transform your browser into a productivity powerhouse with intelligent tab organization, lightning-fast search, and seamless session management. Perfect for power users, researchers, developers, and anyone who works with multiple tabs daily.
+See every tab from every window in one place, find the one you want by typing, clean up duplicates and whole domains, and save sets of tabs to come back to later. Everything happens inside your browser.
 
 ## Key Features
 
@@ -13,8 +13,8 @@ Transform your browser into a productivity powerhouse with intelligent tab organ
 - **Chrome Tab Groups**: Full integration with Chrome's native tab grouping system
 - **Visual Indicators**: Clear highlighting for active, pinned, and audible tabs
 
-### 🔍 **Lightning-Fast Search**
-- **Instant Search**: Find any tab by title or URL in milliseconds
+### 🔍 **Search**
+- **Search As You Type**: Filter the list by title or URL
 - **Smart Filtering**: Filter by active tabs, pinned tabs, audible tabs, or grouped tabs
 - **Case-Insensitive**: Search works regardless of capitalization
 - **Partial Matching**: Find tabs with partial keywords or URL fragments
@@ -23,7 +23,7 @@ Transform your browser into a productivity powerhouse with intelligent tab organ
 - **Multi-Select**: Select multiple tabs across different domains and windows
 - **Bulk Actions**: Close, group, ungroup, or move multiple tabs at once
 - **Smart Grouping**: Create tab groups from selected tabs with a name and color, one group per window
-- **Window Management**: Move tabs between windows or create new windows instantly
+- **Window Management**: Move selected tabs into a new window
 
 ### 💾 **Session Management**
 - **Save Sessions**: Preserve your browsing state with custom session names
@@ -45,34 +45,14 @@ Transform your browser into a productivity powerhouse with intelligent tab organ
 
 ## Perfect For
 
-### 👨‍💻 **Developers**
-- Manage multiple project repositories and documentation tabs
-- Organize development tools, testing sites, and reference materials
-- Switch between different coding environments efficiently
-- Keep track of multiple GitHub repositories and Stack Overflow tabs
-
-### 🔬 **Researchers**
-- Organize research materials by topic or project
-- Save and restore research sessions for different subjects
-- Quickly find specific papers, articles, or reference materials
-- Manage citation sources and academic resources
-
-### 💼 **Professionals**
-- Organize work-related tabs by project or client
-- Save daily work sessions for consistent productivity
-- Switch between different work contexts efficiently
-- Manage email, documents, and communication tools
-
-### 🎓 **Students**
-- Organize study materials by subject or assignment
-- Save research sessions for different courses
-- Manage online learning platforms and resources
-- Keep track of assignment deadlines and course materials
+- **Developers** keeping documentation, repositories and tools open side by side
+- **Researchers** collecting sources by topic and returning to them later
+- **Anyone** who works with many tabs and windows and wants them under control
 
 ## Privacy & Security
 
 ✅ **100% Local Processing**: All data stays on your device - no external servers
-✅ **No Data Collection**: Nothing is collected or transmitted; there are no network requests at all
+✅ **Nothing Leaves Your Device**: Nothing is sent to the developer or anyone else; the extension makes no network requests at all
 ✅ **Local Storage Only**: Sessions you save stay in Chrome's local extension storage on your device
 ✅ **No Incognito Access**: The extension cannot run in or see incognito windows
 ✅ **Minimal Permissions**: No access to page content, no host permissions, no content scripts
@@ -81,11 +61,9 @@ Transform your browser into a productivity powerhouse with intelligent tab organ
 
 ## Why Choose Tabularasa?
 
-### 🚀 **Performance**
-- Lightweight and fast - doesn't slow down your browser
-- Efficient memory usage with optimized tab handling
-- Instant response times for search and filtering
-- Minimal resource consumption
+### 🚀 **Lightweight**
+- No background work: the service worker only runs when you click the toolbar button
+- The list updates in place as tabs change, and pauses while the manager is not visible
 
 ### 🎨 **User Experience**
 - Clean, intuitive interface that's easy to learn
@@ -97,11 +75,8 @@ Transform your browser into a productivity powerhouse with intelligent tab organ
 - Comprehensive error handling and recovery
 - Automated tests run against the real extension code on every change
 
-### 🌟 **Value**
-- Free to use with no hidden costs or premium features
-- Immediate productivity boost for tab-heavy workflows
-- Saves time and reduces browser clutter
-- Improves focus and reduces tab-related stress
+### 🌟 **Free**
+- Free to use, with no premium tier, account, or ads
 
 ## Installation & Setup
 
