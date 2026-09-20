@@ -13,6 +13,9 @@
     "clean": "rm -rf coverage dist",
     "dev": "npm run build:watch"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "devDependencies": {
     "@babel/core": "^7.22.0",
     "@babel/preset-env": "^7.22.0",
@@ -41,8 +44,5 @@
   ],
   "author": "Tabularasa Extension",
   "license": "Apache-2.0",
-  "engines": {
-    "node": ">=22"
-  },
   "private": true
 }
