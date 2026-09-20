@@ -13,7 +13,6 @@ Tabularasa is a Chrome extension that helps you manage your browser tabs and win
 - Versions after 1.0.1 make **no network requests at all**. Versions 1.0.0 and 1.0.1 made one kind of request: they loaded each tab's icon from its website (see "Favicons").
 - It **reads** information about your open tabs in order to show and manage them.
 - It **stores** only two things, both on your device: the sessions you choose to save, and the view settings of an open manager tab.
-- Nothing is sent to, or available to, the developer.
 
 ## What Tabularasa Reads
 

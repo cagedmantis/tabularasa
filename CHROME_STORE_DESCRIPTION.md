@@ -2,7 +2,7 @@
 
 ## Enhanced Description
 
-**Tabularasa** is a powerful Chrome extension that revolutionizes how you manage browser tabs and windows. Say goodbye to tab chaos and hello to organized, productive browsing.
+**Tabularasa** is a tab and window manager for Chrome. It opens in its own tab and shows every tab from every window in one searchable list.
 
 See every tab from every window in one place, find the one you want by typing, clean up duplicates and whole domains, and save sets of tabs to come back to later. Everything happens inside your browser.
 
@@ -63,7 +63,7 @@ See every tab from every window in one place, find the one you want by typing, c
 
 ### 🚀 **Lightweight**
 - No background work: the service worker only runs when you click the toolbar button
-- The list updates in place as tabs change, and pauses while the manager is not visible
+- The list updates live as tabs change, and pauses while the manager is not visible
 
 ### 🎨 **User Experience**
 - Clean, intuitive interface that's easy to learn
