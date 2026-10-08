@@ -33,7 +33,7 @@ describe('published documents match the manifest', () => {
 
     test('no document mentions a permission the extension does not request', () => {
         const known = ['activeTab', 'history', 'bookmarks', 'cookies', 'webRequest', 'scripting', 'management'];
-        const documents = ['PRIVACY_POLICY.md', 'STORE_SUBMISSION.md', 'CHROME_STORE_GUIDE.md', 'CHROME_STORE_DESCRIPTION.md'];
+        const documents = ['PRIVACY_POLICY.md', 'STORE_SUBMISSION.md', 'CHROME_STORE_GUIDE.md', 'CHROME_STORE_DESCRIPTION.md', 'SECURITY.md'];
 
         documents.forEach(file => {
             known.filter(name => !permissions.includes(name)).forEach(name => {
@@ -41,6 +41,15 @@ describe('published documents match the manifest', () => {
                     .toEqual({ file, mentions: name, found: false });
             });
         });
+    });
+
+    test('the security policy scopes exactly the permissions requested', () => {
+        const sentence = read('SECURITY.md').match(/it requests the (.+?) permissions?,/);
+        const listed = Array.from(sentence[1].matchAll(/`([A-Za-z]+)`/g))
+            .map(match => match[1])
+            .sort();
+
+        expect(listed).toEqual(permissions);
     });
 
     test('the store submission quotes the manifest description', () => {
