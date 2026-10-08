@@ -2,24 +2,35 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
     branches: [ main ]
+  pull_request:
+    # Every pull request, not only those targeting main, so that stacked
+    # pull requests are tested too.
+  schedule:
+    # Weekly, so a new advisory in the toolchain is noticed even when no
+    # one is opening pull requests.
+    - cron: '17 6 * * 1'
+
+# Least privilege: the jobs only read the repository.
+permissions:
+  contents: read
 
 jobs:
   test-and-lint:
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
-        node-version: [18.x, 20.x]
+        # Maintained Node.js lines; the Docker build uses 22.
+        node-version: [22.x, 24.x]
 
     steps:
+    # Third-party actions are pinned to a commit, not a movable tag.
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Setup Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
@@ -33,20 +44,27 @@ jobs:
     - name: Run ESLint
       run: npm run lint
 
+    # Collects coverage and enforces the floor in tests/jest.config.js.
     - name: Run tests
       run: npm test
 
-    - name: Run tests with coverage
-      run: npm run test:coverage
+  # Its own job: a newly published advisory has nothing to do with the change
+  # under test, so it must not turn the test job red. It still shows up on the
+  # pull request, and runs weekly on its own.
+  audit:
+    runs-on: ubuntu-latest
 
-    - name: Upload coverage to Codecov
-      if: matrix.node-version == '20.x'
-      uses: codecov/codecov-action@v3
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Setup Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
-        file: ./tests/coverage/lcov.info
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
+        node-version: '22.x'
+
+    - name: Audit dependencies
+      run: npm audit --audit-level=high
 
   build:
     runs-on: ubuntu-latest
@@ -54,12 +72,12 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
-        node-version: '20.x'
+        node-version: '22.x'
         cache: 'npm'
 
     - name: Install dependencies
@@ -75,7 +93,7 @@ jobs:
       run: make package
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: extension-package
         path: dist-package/
