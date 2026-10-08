@@ -10,7 +10,7 @@ make screenshots  # regenerates screenshots/*.png if needed
 
 ## Upload
 
-- **Package**: `tabularasa-1.0.0.zip` (created in the repo root by `make zip`)
+- **Package**: `tabularasa-<version>.zip` (created in the repo root by `make zip`)
 
 ## Store Listing tab
 
@@ -49,6 +49,12 @@ make screenshots  # regenerates screenshots/*.png if needed
   device.
 - **tabGroups**: Required to display and manage Chrome's native tab groups (create,
   rename, color, ungroup) from the manager UI.
+- **favicon**: Required to show each tab's site icon in the list from Chrome's local
+  favicon cache (`chrome-extension://<id>/_favicon/`). This avoids requesting icons
+  from websites, so listing tabs causes no network traffic.
+
+No host permissions and no content scripts are requested. These four are the complete
+list in `manifest.json`; the listing and `PRIVACY_POLICY.md` must name the same four.
 
 ### Remote code
 
@@ -57,10 +63,17 @@ make screenshots  # regenerates screenshots/*.png if needed
 
 ### Data usage
 
-- Check **none** of the data collection categories — the extension collects no user
-  data and transmits nothing off-device.
-- Certify the disclosures: no sale of data, no use unrelated to the single purpose,
-  no use for creditworthiness.
+- Tick **Web history** (the pages a user has visited, with associated data such as the
+  title). Tabularasa reads the URLs and titles of open tabs and stores them in sessions
+  the user saves. The Chrome Web Store User Data FAQ says extensions must disclose how
+  they handle user data "even when data is processed or stored locally on a user's
+  device and is not transmitted", and counts URLs as web browsing activity. With nothing
+  ticked, the listing would state that the developer does not collect or use your data,
+  next to a privacy policy that says sessions are a form of browsing history.
+- Tick nothing else: no page content, no user-activity monitoring, no personally
+  identifiable, authentication, financial, health, communication or location data.
+- Certify all three statements: no sale or transfer of data to third parties, no use
+  unrelated to the single purpose, no use for creditworthiness or lending.
 
 ### Privacy policy URL
 
@@ -80,7 +93,9 @@ contents of `PRIVACY_POLICY.md` is fine too.)
 ## Pre-submission checklist
 
 - [ ] `make verify` passes
-- [ ] `make zip` produced `tabularasa-1.0.0.zip`
+- [ ] `make zip` produced `tabularasa-<version>.zip`
+- [ ] Permissions in `manifest.json`, the justifications above, and `PRIVACY_POLICY.md` all list the same permissions
+- [ ] Every feature named in `CHROME_STORE_DESCRIPTION.md` exists in this version
 - [ ] ZIP tested: load `dist-package/` as an unpacked extension in Chrome and click through the UI
 - [ ] Repository is public (for the privacy policy URL)
 - [ ] Developer account registered ($5 one-time fee)

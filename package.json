@@ -40,6 +40,6 @@
     "typescript"
   ],
   "author": "Tabularasa Extension",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": true
 }
