@@ -35,9 +35,9 @@ module.exports = {
     // Module paths
     moduleFileExtensions: ['js', 'json', 'ts'],
 
-    // Transform
+    // Only the TypeScript sources need transforming; the tests are plain
+    // CommonJS that Node runs as is.
     transform: {
-        '^.+\\.js$': 'babel-jest',
         '^.+\\.ts$': 'ts-jest'
     },
 
@@ -49,8 +49,5 @@ module.exports = {
     ],
 
     // Verbose output
-    verbose: true,
-
-    // Preset
-    preset: 'ts-jest'
+    verbose: true
 };
