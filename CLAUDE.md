@@ -35,7 +35,8 @@ Tabularasa is a Chrome extension that provides advanced tab and window managemen
 ### Build & Config
 - `dist/` - Compiled JavaScript output
 - `tsconfig.json` - TypeScript configuration
-- `.eslintrc.js` - ESLint rules for code quality
+- `eslint.config.js` - ESLint rules for code quality (flat config)
+- `.npmrc` - Disables dependency install scripts
 - `package.json` - Dependencies and scripts
 - `Makefile` - Development workflow commands
 

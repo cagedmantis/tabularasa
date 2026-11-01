@@ -15,86 +15,78 @@ on:
 permissions:
   contents: read
 
-jobs:
-  test-and-lint:
-    runs-on: ubuntu-latest
+# A newer push to the same branch or pull request supersedes the old run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-    strategy:
-      matrix:
-        # Maintained Node.js lines; the Docker build uses 22.
-        node-version: [22.x, 24.x]
+jobs:
+  # One job, one install: Node only runs the toolchain (the extension runs in
+  # Chrome), so a Node version matrix would repeat the same checks.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
     # Third-party actions are pinned to a commit, not a movable tag.
     - name: Checkout code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-    - name: Setup Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Run TypeScript compilation
-      run: npm run build
-
-    - name: Run ESLint
-      run: npm run lint
-
-    # Collects coverage and enforces the floor in tests/jest.config.js.
-    - name: Run tests
-      run: npm test
-
-  # Its own job: a newly published advisory has nothing to do with the change
-  # under test, so it must not turn the test job red. It still shows up on the
-  # pull request, and runs weekly on its own.
-  audit:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        persist-credentials: false
 
     - name: Setup Node.js
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
-        node-version: '22.x'
-
-    - name: Audit dependencies
-      run: npm audit --audit-level=high
-
-  build:
-    runs-on: ubuntu-latest
-    needs: test-and-lint
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-    - name: Setup Node.js
-      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-      with:
+        # The engines floor in package.json, and the Docker build's version.
         node-version: '22.x'
         cache: 'npm'
 
+    # Install scripts are disabled by .npmrc.
     - name: Install dependencies
       run: npm ci
-
-    - name: Build extension
-      run: npm run build
 
     - name: Validate manifest
       run: make validate-manifest
 
-    - name: Create distribution package
+    # Type check and compile, test (with the coverage floor in
+    # tests/jest.config.js), lint with zero warnings, then assemble exactly
+    # the files that ship.
+    - name: Build, test, lint and package
       run: make package
 
-    - name: Upload build artifacts
+    - name: Upload extension package
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: extension-package
         path: dist-package/
         retention-days: 30
+
+  # Its own job: a newly published advisory has nothing to do with the change
+  # under test, so it must not turn the verify job red. It still shows up on
+  # the pull request, and runs weekly on its own.
+  supply-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Setup Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: '22.x'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Audit dependencies
+      run: npm audit --audit-level=high
+
+    # Every installed package carries a valid npm registry signature, so the
+    # lockfile resolved to what the registry actually published.
+    - name: Verify registry signatures
+      run: npm audit signatures

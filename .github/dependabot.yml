@@ -17,6 +17,11 @@ updates:
       toolchain:
         patterns: ["*"]
         update-types: [minor, patch]
+    ignore:
+      # TypeScript 7 is the native compiler and has no JS compiler API, which
+      # ts-jest and typescript-eslint need. Drop this once both support it.
+      - dependency-name: typescript
+        versions: [">=7"]
 
   - package-ecosystem: github-actions
     directory: /

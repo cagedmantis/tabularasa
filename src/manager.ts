@@ -28,7 +28,7 @@ interface WindowInfo {
 interface TabGroupInfo {
     id: number;
     title?: string;
-    color: chrome.tabGroups.ColorEnum;
+    color: TabGroupColor;
     collapsed: boolean;
     windowId: number;
 }
@@ -42,6 +42,16 @@ interface TabBucket {
 }
 
 type ViewType = 'windows' | 'groups' | 'domains';
+
+// A group colour as the string Chrome reports and accepts ('grey', 'blue', ...)
+type TabGroupColor = `${chrome.tabGroups.Color}`;
+
+// Chrome's grouping calls reject an empty list of tab IDs, and its types say so.
+type TabIds = [number, ...number[]];
+
+function isNonEmpty(ids: number[]): ids is TabIds {
+    return ids.length > 0;
+}
 
 interface SessionInfo {
     id: string;
@@ -59,7 +69,7 @@ interface SessionInfo {
         groups: {
             id: number;
             title?: string;
-            color: chrome.tabGroups.ColorEnum;
+            color: TabGroupColor;
         }[];
     }[];
 }
@@ -1323,7 +1333,8 @@ class TabManager {
                         await chrome.tabs.create({ ...properties, windowId: tab.windowId, index: tab.index });
                     } catch {
                         const newWindow = await chrome.windows.create({ url: tab.url, focused: false });
-                        replacementWindows.set(tab.windowId, newWindow.id!);
+                        if (newWindow?.id === undefined) {continue;}
+                        replacementWindows.set(tab.windowId, newWindow.id);
                         const newTabId = newWindow.tabs?.[0]?.id;
                         if (tab.pinned && newTabId !== undefined) {
                             await chrome.tabs.update(newTabId, { pinned: true });
@@ -1506,8 +1517,9 @@ class TabManager {
         try {
             const [first, ...rest] = movable.map(tab => tab.id);
             const newWindow = await chrome.windows.create({ tabId: first });
+            if (newWindow?.id === undefined) {throw new Error('No window was created');}
             if (rest.length > 0) {
-                await chrome.tabs.move(rest, { windowId: newWindow.id!, index: -1 });
+                await chrome.tabs.move(rest, { windowId: newWindow.id, index: -1 });
             }
 
             this.selectedTabs.clear();
@@ -1638,7 +1650,7 @@ class TabManager {
 
     private async confirmGroupCreation(): Promise<void> {
         const groupName = (document.getElementById('group-name') as HTMLInputElement).value.trim();
-        const groupColor = (document.getElementById('group-color') as HTMLSelectElement).value as chrome.tabGroups.ColorEnum;
+        const groupColor = (document.getElementById('group-color') as HTMLSelectElement).value as TabGroupColor;
 
         if (this.selectedTabs.size === 0) {
             this.showStatusMessage('Please select tabs to group', 'error');
@@ -1658,7 +1670,7 @@ class TabManager {
         // A group lives in one window. Without an explicit window Chrome
         // creates it in the current one, dragging every selected tab into
         // the manager's window, so make one group per window, in place.
-        const byWindow = new Map<number, number[]>();
+        const byWindow = new Map<number, TabIds>();
         groupable.forEach(tab => {
             byWindow.set(tab.windowId, [...(byWindow.get(tab.windowId) ?? []), tab.id]);
         });
@@ -1719,6 +1731,7 @@ class TabManager {
 
         try {
             const tabIds = Array.from(this.selectedTabs);
+            if (!isNonEmpty(tabIds)) {return;}
             await chrome.tabs.ungroup(tabIds);
             this.selectedTabs.clear();
             this.showStatusMessage(`${this.plural(tabIds.length, 'tab')} ungrouped`);
@@ -1734,6 +1747,7 @@ class TabManager {
         try {
             const tabsInGroup = this.tabs.filter(tab => tab.groupId === groupId);
             const tabIds = tabsInGroup.map(tab => tab.id);
+            if (!isNonEmpty(tabIds)) {return;}
             await chrome.tabs.ungroup(tabIds);
             this.showStatusMessage(`Ungrouped ${tabIds.length} tabs`);
             await this.refreshTabs();
@@ -1951,8 +1965,8 @@ class TabManager {
             const first = tabs[firstIndex];
             try {
                 const newWindow = await chrome.windows.create({ url: first.url, focused: false });
-                windowId = newWindow.id!;
-                const firstTabId = newWindow.tabs?.[0]?.id;
+                windowId = newWindow?.id;
+                const firstTabId = newWindow?.tabs?.[0]?.id;
                 if (firstTabId === undefined) {continue;}
 
                 restoredTabIds.set(first, firstTabId);
@@ -1987,7 +2001,7 @@ class TabManager {
             const tabIds = tabs
                 .filter(tab => tab.groupId === groupData.id && restoredTabIds.has(tab))
                 .map(tab => restoredTabIds.get(tab)!);
-            if (tabIds.length === 0) {continue;}
+            if (!isNonEmpty(tabIds)) {continue;}
 
             try {
                 // Without an explicit windowId the group is created in the
