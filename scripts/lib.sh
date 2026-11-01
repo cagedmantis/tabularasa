@@ -63,16 +63,13 @@ assert_clean_tree() {
 }
 
 # ---------------------------------------------------------------------------
-# JSON / version helpers (python3 for correct parsing/validation)
+# Version helpers (sed only: the host needs no interpreter; the build in
+# Docker validates the manifest fully)
 # ---------------------------------------------------------------------------
 
-# Print the "version" field of a JSON file.
+# Print the top-level "version" field of manifest.json or package.json.
 json_version() {
-	python3 - "$1" <<'PY'
-import json, sys
-with open(sys.argv[1]) as fh:
-    print(json.load(fh)["version"])
-PY
+	sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | head -n 1
 }
 
 # Rewrite only the "version" string in a JSON file (surgical, minimal diff).
@@ -82,38 +79,14 @@ set_json_version() {
 	_f=$1; _ver=$2; _tmp="${_f}.tmp.$$"
 	sed 's/\("version"[[:space:]]*:[[:space:]]*"\)[0-9][0-9.]*\("\)/\1'"$_ver"'\2/' \
 		"$_f" > "$_tmp" && mv "$_tmp" "$_f" || { rm -f "$_tmp"; die "failed to update version in $_f"; }
-	assert_valid_json "$_f"
+	[ "$(json_version "$_f")" = "$_ver" ] || die "failed to update version in $_f"
 }
 
-assert_valid_json() {
-	python3 - "$1" <<'PY' || die "not valid JSON: $1"
-import json, sys
-with open(sys.argv[1]) as fh:
-    json.load(fh)
-PY
-}
-
-# Validate manifest.json: valid JSON, Manifest V3, required keys present, and
-# the version equals the expected release version.
+# Fail unless the manifest's version is the release version. Everything else
+# about the manifest is checked by the build (tools/pack).
 validate_manifest() {
-	python3 - "$1" "$2" <<'PY' || die "manifest validation failed"
-import json, sys
-path, want = sys.argv[1], sys.argv[2]
-try:
-    with open(path) as fh:
-        m = json.load(fh)
-except Exception as e:  # noqa: BLE001
-    sys.exit("manifest.json is not valid JSON: %s" % e)
-
-for key in ("manifest_version", "name", "version"):
-    if key not in m:
-        sys.exit("manifest.json is missing required MV3 key: %s" % key)
-
-if m["manifest_version"] != 3:
-    sys.exit("manifest_version must be 3, got %r" % m["manifest_version"])
-if m["version"] != want:
-    sys.exit("manifest version %r does not match release target %r" % (m["version"], want))
-PY
+	_got=$(json_version "$1")
+	[ "$_got" = "$2" ] || die "manifest version '$_got' does not match release target '$2'"
 }
 
 # Compute the next version. Usage: semver_bump <major|minor|patch> <X.Y.Z>

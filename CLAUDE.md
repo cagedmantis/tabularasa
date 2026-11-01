@@ -8,19 +8,23 @@ Tabularasa is a Chrome extension that provides advanced tab and window managemen
 
 ## Development Commands
 
+Everything builds, tests and lints in Docker (see `Dockerfile`); the host needs
+only Docker. Do not install Node or run npm on the host: use the make targets.
+
 ### Essential Commands
 - `make verify` - **Run before committing** (build + lint + test)
 - `make dev` - Build, lint, test, then launch Chrome with extension
 - `make chrome-dev` - Load extension in Chrome for testing
 
 ### Build & Quality
-- `npm run build` / `make build` - Compile TypeScript to JavaScript
-- `npm run lint` / `make lint` - Run ESLint on TypeScript files
-- `npm test` / `make test` - Run Jest tests
-- `npm run lint:fix` / `make lint-fix` - Auto-fix linting issues
+- `make build` - Compile TypeScript into dist/ (native TypeScript 7 compiler)
+- `make lint` - Run ESLint on TypeScript files
+- `make test` - Run Jest tests
+- `make lint-fix` - Auto-fix linting issues
 
 ### Other Commands
-- `make package` - Create distribution package
+- `make package` - Build, test, lint and package into out/ (zip, unpacked extension, SHA256SUMS)
+- `make verify-reproducible` - Two clean builds (second for another CPU) must give the same zip
 - `make screenshots` - Generate Chrome Web Store screenshots
 - `make help` - Show all available commands
 
@@ -33,11 +37,14 @@ Tabularasa is a Chrome extension that provides advanced tab and window managemen
 - `manager.html` + `manager.css` - Extension UI
 
 ### Build & Config
+- `Dockerfile` - The build: pinned images, npm toolchain, native tsc, tests, lint, packaging
+- `tools/pack/` - Go program that validates the manifest and writes the reproducible zip; its file list is what ships
 - `dist/` - Compiled JavaScript output
+- `out/` - Package output
 - `tsconfig.json` - TypeScript configuration
 - `eslint.config.js` - ESLint rules for code quality (flat config)
 - `.npmrc` - Disables dependency install scripts
-- `package.json` - Dependencies and scripts
+- `package.json` - Test and lint toolchain (nothing from npm ships)
 - `Makefile` - Development workflow commands
 
 ### Documentation & Store

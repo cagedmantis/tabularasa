@@ -96,6 +96,6 @@ contents of `PRIVACY_POLICY.md` is fine too.)
 - [ ] `make zip` produced `tabularasa-<version>.zip`
 - [ ] Permissions in `manifest.json`, the justifications above, and `PRIVACY_POLICY.md` all list the same permissions
 - [ ] Every feature named in `CHROME_STORE_DESCRIPTION.md` exists in this version
-- [ ] ZIP tested: load `dist-package/` as an unpacked extension in Chrome and click through the UI
+- [ ] ZIP tested: load `out/extension/` as an unpacked extension in Chrome and click through the UI
 - [ ] Repository is public (for the privacy policy URL)
 - [ ] Developer account registered ($5 one-time fee)

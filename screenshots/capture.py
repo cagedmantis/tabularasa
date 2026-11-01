@@ -136,6 +136,8 @@ def capture(chrome, html_path, out_path, width, height):
         [
             chrome, '--headless=new', '--disable-gpu', '--hide-scrollbars',
             '--force-device-scale-factor=1',
+            # Set by the Docker assets image, where Chrome's sandbox cannot run.
+            *os.environ.get('CHROME_EXTRA_FLAGS', '').split(),
             '--window-size=%d,%d' % (width, height),
             '--screenshot=%s' % out_path,
             'file://%s' % html_path,

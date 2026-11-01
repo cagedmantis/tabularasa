@@ -23,6 +23,15 @@ updates:
       - dependency-name: typescript
         versions: [">=7"]
 
+  # Base images in the Dockerfile, pinned by digest. The native TypeScript
+  # compiler there is pinned by checksum and updated by hand.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

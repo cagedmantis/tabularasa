@@ -1,0 +1,19 @@
+# Allowlist: the build context holds only what the build reads, so nothing
+# else on the host (node_modules, dist/, out/, .git, editor files, secrets)
+# can reach it or change the result.
+*
+!.npmrc
+!package.json
+!package-lock.json
+!tsconfig.json
+!eslint.config.js
+!manifest.json
+!manager.html
+!manager.css
+!LICENSE
+!*.md
+!src/
+!tests/
+!icons/*.png
+!tools/
+tests/coverage/
