@@ -1,50 +1,69 @@
 # Tabularasa Chrome Extension Makefile
-# Common tasks for development and building
+#
+# Every target that builds, tests or runs code does so in Docker (see the
+# Dockerfile), so the host needs only Docker. git is needed for the git and
+# release targets, and Chrome to run the extension.
 
 # Variables
 EXTENSION_NAME := tabularasa
-VERSION := $(shell python3 -c "import json; print(json.load(open('manifest.json'))['version'])")
-EXTENSION_DIR := $(PWD)
-DIST_DIR := $(EXTENSION_DIR)/dist
-ICONS_DIR := $(EXTENSION_DIR)/icons
-CHROME_FLAGS := --load-extension=$(EXTENSION_DIR)
-# A throwaway profile is all the extension needs. Do not add
-# --disable-web-security: it turns off the same-origin policy for every site
-# opened in that browser, and the extension makes no cross-origin requests.
-CHROME_DEV_FLAGS := --user-data-dir=/tmp/chrome-dev-session
+VERSION := $(shell sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' manifest.json | head -n 1)
+OUT_DIR := out
+DEV_IMAGE := tabularasa-dev
+ASSETS_IMAGE := tabularasa-assets
+# Run as the host user so files written to mounts stay the user's.
+RUN_AS := --user $(shell id -u):$(shell id -g) -e HOME=/tmp
+# Export a Dockerfile stage's files to a host directory.
+EXPORT = docker build --target $(1) --output type=local,dest=$(2) .
+# Re-run a command in the dev image whenever the sources change. Polls once a
+# second: file events do not reliably cross a Docker Desktop bind mount.
+ON_CHANGE = while :; do now=$$(cat src/*.ts tests/*.js | md5sum); \
+	if [ "$$now" != "$$last" ]; then last=$$now; $(1); fi; sleep 1; done
+# Chrome's own profile is never used: chrome-dev keeps a dedicated profile,
+# chrome-clean starts from an empty one. Do not add --disable-web-security: it
+# turns off the same-origin policy for every site opened in that browser, and
+# the extension makes no cross-origin requests.
+CHROME_PROFILE := $(CURDIR)/.chrome-profile
+CHROME_FLAGS = --user-data-dir=$(1) --load-extension=$(CURDIR)/$(OUT_DIR)/extension chrome://extensions
+FIND_CHROME = for c in google-chrome google-chrome-stable chromium chromium-browser \
+	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; do \
+	command -v "$$c" >/dev/null 2>&1 && { CHROME=$$c; break; }; done; \
+	[ -n "$${CHROME:-}" ] || { echo "Chrome not found. Please install Google Chrome."; exit 1; }
+REPRO_PLATFORM ?= linux/amd64
+# Interactive (Ctrl+C stops the container) only when run from a terminal.
+TTY = $$([ -t 0 ] && echo -it)
 
 # Default target
 .PHONY: help
 help:
 	@echo "Tabularasa Chrome Extension - Available Make targets:"
+	@echo "(everything runs in Docker; the host needs only Docker)"
 	@echo ""
 	@echo "Build & Development:"
-	@echo "  build          - Build TypeScript files"
-	@echo "  watch          - Watch TypeScript files for changes and rebuild"
+	@echo "  build          - Compile TypeScript into dist/ (native TypeScript 7)"
+	@echo "  watch          - Recompile dist/ whenever src/ changes"
 	@echo "  clean          - Clean build artifacts"
 	@echo "  icons          - Generate all icon files"
 	@echo ""
 	@echo "Testing & Quality:"
 	@echo "  test           - Run all tests"
-	@echo "  test-watch     - Run tests in watch mode"
-	@echo "  test-coverage  - Run tests with coverage report"
+	@echo "  test-watch     - Re-run the tests whenever src/ or tests/ change"
+	@echo "  test-coverage  - Run tests and write the coverage report to tests/coverage/"
 	@echo "  lint           - Run ESLint on source files"
 	@echo "  lint-fix       - Fix ESLint issues automatically"
+	@echo "  audit          - Check dependencies for advisories and registry signatures"
 	@echo "  verify         - Run build, lint, and test (recommended before commits)"
 	@echo ""
 	@echo "Chrome Development:"
-	@echo "  chrome-dev     - Launch Chrome with extension loaded (requires Chrome to be closed)"
-	@echo "  chrome-clean   - Launch Chrome with clean profile and extension"
+	@echo "  chrome-dev     - Package, then open Chrome with a dev profile and the extension"
+	@echo "  chrome-clean   - Same, with a fresh empty profile"
 	@echo "  open-extensions - Open Chrome extension management page"
 	@echo ""
 	@echo "Package & Distribution:"
-	@echo "  package        - Create distribution package"
-	@echo "  zip            - Create ZIP file for Chrome Web Store"
-	@echo "  zip-only       - Package an already-built dist/ (no rebuild)"
-	@echo "  docker-build   - Run npm ci/build/test/lint in a container (dist/ on host)"
-	@echo "  docker-zip     - Container build + host packaging"
+	@echo "  package        - Build, test, lint, and package into out/ (zip, unpacked, SHA256SUMS)"
+	@echo "  zip            - Same as package"
+	@echo "  verify-reproducible - Build twice from scratch (second on REPRO_PLATFORM) and compare"
 	@echo "  store-prep     - Chrome Web Store preparation checklist"
-	@echo "  validate-manifest - Validate manifest.json for Chrome Web Store"
+	@echo "  validate-manifest - Validate manifest.json and the files it references"
 	@echo "  screenshots    - Generate Chrome Web Store screenshots"
 	@echo ""
 	@echo "Git & Release:"
@@ -57,8 +76,8 @@ help:
 	@echo "  release-patch  - Bump patch version, tag, package, draft GitHub release"
 	@echo ""
 	@echo "Utilities:"
-	@echo "  install        - Install dependencies"
-	@echo "  update         - Update dependencies"
+	@echo "  install        - Build the development image (installs dependencies in it)"
+	@echo "  update         - Update dependencies (writes package.json and package-lock.json)"
 	@echo "  check-deps     - Check for outdated dependencies"
 	@echo ""
 
@@ -66,132 +85,116 @@ help:
 .PHONY: build
 build:
 	@echo "Building TypeScript files..."
-	@npm run build
+	@rm -rf dist
+	@$(call EXPORT,dist,dist)
 
 .PHONY: watch
-watch:
-	@echo "Starting TypeScript watch mode..."
-	@npx tsc --watch
+watch: image
+	@echo "Watching src/ for changes (Ctrl+C to stop)..."
+	@mkdir -p dist
+	@docker run --rm $(TTY) $(RUN_AS) -v "$(CURDIR)/src:/src/src:ro" -v "$(CURDIR)/tests:/src/tests:ro" \
+		-v "$(CURDIR)/dist:/src/dist" $(DEV_IMAGE) \
+		sh -c '$(call ON_CHANGE,tsc -p tsconfig.json && echo "$$(date +%T) compiled")'
 
 .PHONY: clean
 clean:
 	@echo "Cleaning build artifacts..."
-	@rm -rf $(DIST_DIR)
-	@rm -rf node_modules/.cache
-	@rm -rf tests/coverage
+	@rm -rf dist $(OUT_DIR) tests/coverage dist-package .repro
 	@echo "Clean complete."
 
 .PHONY: icons
-icons:
+icons: assets-image
 	@echo "Generating icon files..."
-	@python3 $(ICONS_DIR)/create_icons.py
+	@docker run --rm $(RUN_AS) -v "$(CURDIR):/work" $(ASSETS_IMAGE) python3 icons/create_icons.py
 	@echo "Icons generated successfully."
 
 # Testing targets
+.PHONY: image
+image:
+	@docker build --quiet --target dev --tag $(DEV_IMAGE) . >/dev/null
+
 .PHONY: test
-test:
+test: image
 	@echo "Running tests..."
-	@npm test
+	@docker run --rm $(DEV_IMAGE) npm test
 
 .PHONY: test-watch
-test-watch:
-	@echo "Running tests in watch mode..."
-	@npm run test -- --watch
+test-watch: image
+	@echo "Re-running tests when src/ or tests/ change (Ctrl+C to stop)..."
+	@docker run --rm $(TTY) $(RUN_AS) -v "$(CURDIR)/src:/src/src:ro" -v "$(CURDIR)/tests:/src/tests:ro" \
+		$(DEV_IMAGE) sh -c '$(call ON_CHANGE,npm test --silent -- --coverage=false)'
 
 .PHONY: test-coverage
 test-coverage:
 	@echo "Running tests with coverage..."
-	@npm run test -- --coverage
+	@rm -rf tests/coverage
+	@$(call EXPORT,coverage,tests/coverage)
 	@echo "Coverage report generated in tests/coverage/"
 
 .PHONY: lint
-lint:
+lint: image
 	@echo "Running ESLint..."
-	@npm run lint
+	@docker run --rm $(DEV_IMAGE) npm run lint
 
 .PHONY: lint-fix
-lint-fix:
+lint-fix: image
 	@echo "Fixing ESLint issues..."
-	@npm run lint -- --fix
+	@docker run --rm $(RUN_AS) -v "$(CURDIR)/src:/src/src" $(DEV_IMAGE) npm run lint:fix
+
+.PHONY: audit
+audit: image
+	@echo "Auditing dependencies..."
+	@docker run --rm $(DEV_IMAGE) sh -c 'npm audit --audit-level=high && npm audit signatures'
 
 # Chrome development targets
+# Google Chrome 137+ ignores --load-extension (Chromium still honours it), so
+# with Google Chrome load out/extension once with "Load unpacked"; the dev
+# profile remembers it, and its reload button picks up each new package.
 .PHONY: chrome-dev
-chrome-dev: build
-	@echo "Starting Chrome with extension loaded..."
-	@echo "Note: Chrome must be completely closed for this to work."
-	@echo "If Chrome is already running, please close it first."
-	@echo "Extension will be loaded from: $(EXTENSION_DIR)"
-	@which google-chrome > /dev/null 2>&1 && google-chrome $(CHROME_FLAGS) || \
-	 which google-chrome-stable > /dev/null 2>&1 && google-chrome-stable $(CHROME_FLAGS) || \
-	 which chromium-browser > /dev/null 2>&1 && chromium-browser $(CHROME_FLAGS) || \
-	 which /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome > /dev/null 2>&1 && /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome $(CHROME_FLAGS) || \
-	 echo "Chrome not found. Please install Google Chrome or adjust the path."
+chrome-dev: package
+	@echo "Starting Chrome with the dev profile ($(CHROME_PROFILE))..."
+	@echo "First run with Google Chrome: enable Developer mode, click Load unpacked, choose $(OUT_DIR)/extension."
+	@$(FIND_CHROME); "$$CHROME" $(call CHROME_FLAGS,$(CHROME_PROFILE))
 
 .PHONY: chrome-clean
-chrome-clean: build
-	@echo "Starting Chrome with clean profile and extension loaded..."
-	@which google-chrome > /dev/null 2>&1 && google-chrome $(CHROME_FLAGS) $(CHROME_DEV_FLAGS) || \
-	 which google-chrome-stable > /dev/null 2>&1 && google-chrome-stable $(CHROME_FLAGS) $(CHROME_DEV_FLAGS) || \
-	 which chromium-browser > /dev/null 2>&1 && chromium-browser $(CHROME_FLAGS) $(CHROME_DEV_FLAGS) || \
-	 which /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome > /dev/null 2>&1 && /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome $(CHROME_FLAGS) $(CHROME_DEV_FLAGS) || \
-	 echo "Chrome not found. Please install Google Chrome or adjust the path."
+chrome-clean: package
+	@echo "Starting Chrome with a clean profile..."
+	@echo "With Google Chrome: enable Developer mode, click Load unpacked, choose $(OUT_DIR)/extension."
+	@rm -rf "$(CHROME_PROFILE)-clean"
+	@$(FIND_CHROME); "$$CHROME" $(call CHROME_FLAGS,$(CHROME_PROFILE)-clean)
 
 .PHONY: open-extensions
 open-extensions:
 	@echo "Opening Chrome extensions page..."
-	@which google-chrome > /dev/null 2>&1 && google-chrome chrome://extensions/ || \
-	 which google-chrome-stable > /dev/null 2>&1 && google-chrome-stable chrome://extensions/ || \
-	 which chromium-browser > /dev/null 2>&1 && chromium-browser chrome://extensions/ || \
-	 which /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome > /dev/null 2>&1 && /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome chrome://extensions/ || \
-	 echo "Chrome not found. Please manually navigate to chrome://extensions/"
+	@$(FIND_CHROME); "$$CHROME" chrome://extensions/
 
 # Package targets
-# Only ship what the manifest references: manifest, manager UI, compiled
-# background/manager scripts, and icon PNGs. No source maps, declaration
-# files, icon-generation scripts, or unused legacy popup files.
-# pack assembles dist-package/ from an ALREADY-built dist/ (no build/test/lint).
-# This is the single source of truth for the shipped file list, reused by the
-# local, host, and Docker packaging paths.
-.PHONY: pack
-pack:
-	@echo "Creating distribution package..."
-	@rm -rf dist-package
-	@mkdir -p dist-package/dist dist-package/icons
-	@cp manifest.json manager.html manager.css LICENSE dist-package/
-	@cp $(DIST_DIR)/background.js $(DIST_DIR)/manager.js dist-package/dist/
-	@cp $(ICONS_DIR)/icon-16.png $(ICONS_DIR)/icon-32.png $(ICONS_DIR)/icon-48.png $(ICONS_DIR)/icon-128.png dist-package/icons/
-	@echo "Package created in dist-package/"
-
+# The shipped file list lives in tools/pack/main.go, which validates the
+# manifest and writes a reproducible zip.
 .PHONY: package
-package: build test lint pack
+package:
+	@echo "Building, testing, linting, and packaging..."
+	@rm -rf $(OUT_DIR)
+	@$(call EXPORT,out,$(OUT_DIR))
+	@echo "Package created in $(OUT_DIR)/:"
+	@cat $(OUT_DIR)/SHA256SUMS
 
 .PHONY: zip
 zip: package
-	@echo "Creating ZIP file for Chrome Web Store..."
-	@rm -f $(EXTENSION_NAME)-$(VERSION).zip
-	@cd dist-package && zip -r ../$(EXTENSION_NAME)-$(VERSION).zip .
-	@echo "ZIP file created: $(EXTENSION_NAME)-$(VERSION).zip"
 
-# zip-only packages an already-built dist/ without rebuilding — used after the
-# Node steps have run in Docker (see docker-build). Needs only zip + python3.
-.PHONY: zip-only
-zip-only: pack
-	@echo "Creating ZIP file for Chrome Web Store..."
-	@rm -f $(EXTENSION_NAME)-$(VERSION).zip
-	@cd dist-package && zip -r ../$(EXTENSION_NAME)-$(VERSION).zip .
-	@echo "ZIP file created: $(EXTENSION_NAME)-$(VERSION).zip"
-
-# Docker-based build: run install/build/test/lint in a container so the host
-# needs no Node/npm toolchain. Produces dist/ on the host; override the image
-# with NODE_IMAGE=... if desired.
-NODE_IMAGE ?= node:22-bookworm-slim
-
-.PHONY: docker-build
-docker-build:
-	@NODE_IMAGE=$(NODE_IMAGE) sh scripts/docker-build.sh
-
-.PHONY: docker-zip
-docker-zip: docker-build zip-only
+# Two builds with no cache, the second for another CPU architecture by
+# default, must produce the same zip.
+.PHONY: verify-reproducible
+verify-reproducible:
+	@rm -rf .repro
+	@echo "Clean build for the host platform..."
+	@docker build --no-cache --target out --output type=local,dest=.repro/a . >/dev/null 2>&1
+	@echo "Clean build for $(REPRO_PLATFORM)..."
+	@docker build --no-cache --platform $(REPRO_PLATFORM) --target out --output type=local,dest=.repro/b . >/dev/null 2>&1
+	@cat .repro/a/SHA256SUMS .repro/b/SHA256SUMS
+	@cmp -s .repro/a/SHA256SUMS .repro/b/SHA256SUMS \
+		&& echo "✅ Reproducible: both builds produced the same zip" \
+		|| { echo "❌ The builds differ"; exit 1; }
 
 .PHONY: store-prep
 store-prep: build
@@ -204,24 +207,23 @@ store-prep: build
 	@echo "  1. Create 1-5 screenshots (1280x800px)"
 	@echo "  2. Write comprehensive description"
 	@echo "  3. Create privacy policy"
-	@echo "  4. Register Chrome Web Store developer account ($5)"
+	@echo "  4. Register Chrome Web Store developer account (\$$5)"
 	@echo ""
 	@echo "📖 See CHROME_STORE_GUIDE.md for detailed instructions"
 
 .PHONY: validate-manifest
 validate-manifest:
 	@echo "Validating manifest.json..."
-	@python3 -m json.tool manifest.json > /dev/null && echo "✅ Manifest JSON is valid" || { echo "❌ Manifest JSON is invalid"; exit 1; }
-	@grep -q '"manifest_version": 3' manifest.json && echo "✅ Manifest V3 compliant" || { echo "❌ Not Manifest V3 compliant"; exit 1; }
-	@grep -q '"name"' manifest.json && echo "✅ Name field present" || { echo "❌ Name field missing"; exit 1; }
-	@grep -q '"version"' manifest.json && echo "✅ Version field present" || { echo "❌ Version field missing"; exit 1; }
-	@grep -q '"description"' manifest.json && echo "✅ Description field present" || { echo "❌ Description field missing"; exit 1; }
-	@grep -q '"icons"' manifest.json && echo "✅ Icons field present" || { echo "❌ Icons field missing"; exit 1; }
+	@docker build --quiet --target manifest-check . >/dev/null && echo "✅ Manifest is valid and everything it references ships"
 
 .PHONY: screenshots
-screenshots:
+screenshots: assets-image
 	@echo "Generating Chrome Web Store screenshots..."
-	@python3 screenshots/capture.py
+	@docker run --rm $(RUN_AS) -v "$(CURDIR):/work" $(ASSETS_IMAGE) python3 screenshots/capture.py
+
+.PHONY: assets-image
+assets-image:
+	@docker build --quiet --target assets --tag $(ASSETS_IMAGE) . >/dev/null
 
 # Git targets
 .PHONY: status
@@ -265,19 +267,20 @@ release-patch:
 
 # Dependency management
 .PHONY: install
-install:
-	@echo "Installing dependencies..."
-	@npm install
+install: image
+	@echo "Development image $(DEV_IMAGE) is ready."
 
+# Writes through cat so the host files keep their owner.
 .PHONY: update
-update:
+update: image
 	@echo "Updating dependencies..."
-	@npm update
+	@docker run --rm -v "$(CURDIR):/host" $(DEV_IMAGE) sh -c 'npm update --no-audit --no-fund \
+		&& cat package.json > /host/package.json && cat package-lock.json > /host/package-lock.json'
 
 .PHONY: check-deps
-check-deps:
+check-deps: image
 	@echo "Checking for outdated dependencies..."
-	@npm outdated
+	@docker run --rm $(DEV_IMAGE) npm outdated || true
 
 # Development workflow targets
 .PHONY: dev
@@ -302,22 +305,18 @@ verify: build lint test
 .PHONY: check-tools
 check-tools:
 	@echo "Checking required tools..."
-	@which node > /dev/null 2>&1 && echo "✓ Node.js installed" || echo "✗ Node.js not found"
-	@which npm > /dev/null 2>&1 && echo "✓ npm installed" || echo "✗ npm not found"
-	@which python3 > /dev/null 2>&1 && echo "✓ Python 3 installed" || echo "✗ Python 3 not found"
-	@which git > /dev/null 2>&1 && echo "✓ Git installed" || echo "✗ Git not found"
-	@which google-chrome > /dev/null 2>&1 && echo "✓ Google Chrome installed" || \
-	 which google-chrome-stable > /dev/null 2>&1 && echo "✓ Google Chrome installed" || \
-	 which /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome > /dev/null 2>&1 && echo "✓ Google Chrome installed" || \
-	 echo "✗ Google Chrome not found"
+	@command -v docker > /dev/null 2>&1 && echo "✓ Docker installed (required)" || echo "✗ Docker not found (required)"
+	@docker info > /dev/null 2>&1 && echo "✓ Docker is running" || echo "✗ Docker is not running"
+	@command -v git > /dev/null 2>&1 && echo "✓ Git installed (git and release targets)" || echo "✗ Git not found (git and release targets)"
+	@command -v gh > /dev/null 2>&1 && echo "✓ gh installed (GitHub release)" || echo "- gh not found (optional: GitHub release)"
+	@$(FIND_CHROME) 2>/dev/null; [ -n "$${CHROME:-}" ] && echo "✓ Chrome installed (to run the extension)" || echo "✗ Chrome not found (to run the extension)"
 
 .PHONY: info
 info:
 	@echo "Project Information:"
 	@echo "  Extension Name: $(EXTENSION_NAME)"
-	@echo "  Extension Directory: $(EXTENSION_DIR)"
-	@echo "  Distribution Directory: $(DIST_DIR)"
-	@echo "  Icons Directory: $(ICONS_DIR)"
+	@echo "  Version: $(VERSION)"
+	@echo "  Output Directory: $(CURDIR)/$(OUT_DIR)"
 	@echo ""
 	@echo "Package Information:"
 	@grep -E '"name"|"version"|"description"' package.json

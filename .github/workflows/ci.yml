@@ -15,17 +15,21 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch or pull request supersedes the old run.
+# A newer push to the same pull request supersedes the old run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # One job, one install: Node only runs the toolchain (the extension runs in
-  # Chrome), so a Node version matrix would repeat the same checks.
-  verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  # The same Docker build as `make package` on a laptop: native TypeScript
+  # compile, tests with the coverage floor, lint, manifest validation and the
+  # zip. Built on two CPU architectures, so the zips can be compared.
+  package:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
 
     steps:
     # Third-party actions are pinned to a commit, not a movable tag.
@@ -34,39 +38,40 @@ jobs:
       with:
         persist-credentials: false
 
-    - name: Setup Node.js
-      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-      with:
-        # The engines floor in package.json, and the Docker build's version.
-        node-version: '22.x'
-        cache: 'npm'
-
-    # Install scripts are disabled by .npmrc.
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Validate manifest
-      run: make validate-manifest
-
-    # Type check and compile, test (with the coverage floor in
-    # tests/jest.config.js), lint with zero warnings, then assemble exactly
-    # the files that ship.
     - name: Build, test, lint and package
       run: make package
 
     - name: Upload extension package
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
-        name: extension-package
-        path: dist-package/
+        name: extension-package-${{ runner.arch }}
+        path: out/
         retention-days: 30
 
+  # Two independent builds on different machines and CPU architectures must
+  # produce the same zip, byte for byte.
+  reproducible:
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+    - name: Download both packages
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        pattern: extension-package-*
+
+    - name: Compare checksums
+      run: |
+        cat extension-package-*/SHA256SUMS
+        cmp extension-package-X64/SHA256SUMS extension-package-ARM64/SHA256SUMS
+
   # Its own job: a newly published advisory has nothing to do with the change
-  # under test, so it must not turn the verify job red. It still shows up on
+  # under test, so it must not turn the package job red. It still shows up on
   # the pull request, and runs weekly on its own.
   supply-chain:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
 
     steps:
     - name: Checkout code
@@ -74,19 +79,6 @@ jobs:
       with:
         persist-credentials: false
 
-    - name: Setup Node.js
-      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-      with:
-        node-version: '22.x'
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci
-
+    # npm audit at --audit-level=high, then registry signature verification.
     - name: Audit dependencies
-      run: npm audit --audit-level=high
-
-    # Every installed package carries a valid npm registry signature, so the
-    # lockfile resolved to what the registry actually published.
-    - name: Verify registry signatures
-      run: npm audit signatures
+      run: make audit

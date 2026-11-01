@@ -57,102 +57,90 @@ Tabularasa is a powerful Chrome extension that provides comprehensive tab and wi
 
 ## Installation Guide (Local Testing)
 
-To test the "Tabularasa" Chrome extension locally:
+The only thing you need installed is [Docker](https://docs.docker.com/get-docker/).
+Every build, test and lint runs in a container defined by the
+[`Dockerfile`](Dockerfile); Node, npm, TypeScript and Go never touch your
+machine.
 
-1. **Download/Clone**: Download or clone the entire project directory to your local machine.
+1. **Clone** the repository.
 
-2. **Install Dependencies**:
+2. **Build the extension**:
    ```bash
-   npm install
+   make package
    ```
+   This compiles, tests, lints and packages the extension into `out/`:
+   - `out/extension/` — the unpacked extension, exactly the files that ship
+   - `out/tabularasa-<version>.zip` — the Chrome Web Store package
+   - `out/SHA256SUMS` — its checksum
 
-3. **Build Extension** (if needed):
-   ```bash
-   npm run build
-   ```
+3. **Load it in Chrome**:
+   - Open `chrome://extensions` and toggle on **Developer mode** (top right)
+   - Click **Load unpacked** and choose the `out/extension` folder
 
-4. **Open Chrome Extensions Page**:
-   - Open your Chrome browser
-   - Type `chrome://extensions` in the address bar and press Enter
+4. **Interact**: click the Tabularasa icon in the toolbar to open the tab
+   manager in a new tab.
 
-5. **Enable Developer Mode**:
-   - In the top-right corner of the Extensions page, toggle on "Developer mode"
-
-6. **Load Unpacked**:
-   - Click the "Load unpacked" button that appears
-   - Browse to the directory where you saved the extension's files (the main folder containing `manifest.json`, `manager.html`, etc.) and select it
-
-7. **Verify Installation**:
-   - The "Tabularasa" extension should now appear in your list of installed extensions
-   - A "Tabularasa" icon should appear in your Chrome toolbar
-
-8. **Interact**:
-   - Click the "Tabularasa" icon to open the tab manager in a new tab and begin testing its features
-
-9. **Reloading Changes**: If you make any changes to the extension's code, go back to `chrome://extensions` and click the "reload" icon (a circular arrow) next to the "Tabularasa" extension to apply the changes.
+5. **Reloading changes**: run `make package` again, then click the reload icon
+   (a circular arrow) next to Tabularasa on `chrome://extensions`.
 
 ## Development
 
 ### Using the Makefile
 
-The project includes a comprehensive Makefile for common development tasks:
+Each target runs in Docker. `make help` lists them all.
 
 ```bash
-# Show all available commands
-make help
-
-# Build the extension
-make build
-
-# Run tests
-make test
-
-# Generate icons
-make icons
-
-# Load extension in Chrome (requires Chrome to be closed first)
-make chrome-dev
-
-# Launch Chrome with clean profile and extension
-make chrome-clean
-
-# Create distribution package
-make package
-
-# Run full test suite with linting and coverage
-make full-test
+make verify         # compile, lint and test (run before committing)
+make package        # compile, test, lint and package into out/
+make test           # run the tests
+make test-watch     # re-run the tests whenever src/ or tests/ change
+make build          # compile into dist/
+make watch          # recompile dist/ whenever src/ changes
+make lint-fix       # fix lint issues in src/
+make chrome-dev     # package, then open Chrome with a dev profile
+make full-test      # lint and test
 ```
 
-### Command Line Extension Loading
+### Loading the Extension from the Command Line
 
-You can load the unpacked extension via command line using:
+`make chrome-dev` packages the extension and opens Chrome with a dedicated
+profile (`.chrome-profile/`), so your own profile is never touched. Chromium
+loads `out/extension` automatically. Google Chrome 137 and later ignore the
+`--load-extension` flag, so the first time choose **Load unpacked** →
+`out/extension`; the dev profile remembers it from then on, and its reload
+button picks up each new `make package`. `make chrome-clean` does the same with
+a fresh, empty profile.
+
+### How the Build Works
+
+The [`Dockerfile`](Dockerfile) is the single definition of the build, used both
+locally and in CI:
+
+- **Compile** — the shipped JavaScript is compiled by the native (Go)
+  TypeScript 7 compiler, downloaded from Microsoft's release and verified by
+  checksum. No npm package ships: the output is two plain browser scripts.
+- **Test and lint** — Jest and ESLint, installed by `npm ci` from the lockfile
+  with install scripts disabled (`.npmrc`). They still need the TypeScript 6
+  JS API, which TypeScript 7 does not provide yet.
+- **Package** — a small Go program ([`tools/pack`](tools/pack)) validates the
+  manifest and every file it and `manager.html` reference, then writes the
+  zip. Its file list is the definition of what ships.
+
+### Reproducible Builds
+
+The same commit produces the same zip, byte for byte, on any machine and CPU
+architecture: base images are pinned by digest, npm packages by the
+lockfile's integrity hashes, the compiler by checksum, and the zip has fixed
+timestamps, modes and file order. CI builds on x64 and ARM64 and fails if the
+two zips differ. To check locally:
 
 ```bash
-# Method 1: Using the Makefile (recommended)
-make chrome-dev
-
-# Method 2: Direct Chrome command (macOS)
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --load-extension=/path/to/tabularasa
-
-# Method 3: Direct Chrome command (Linux)
-google-chrome --load-extension=/path/to/tabularasa
+make verify-reproducible                          # two clean builds, compared
+make verify-reproducible REPRO_PLATFORM=linux/arm64
 ```
 
-**Important Notes:**
-- Chrome must be completely closed for command-line loading to work
-- The `--load-extension` flag only works in development mode
-- Extensions loaded this way are temporary and removed when Chrome restarts
-- For permanent development, use the manual loading method described below
-
-### Manual Extension Loading
-
-For regular development work, manually load the extension:
-
-1. Build the extension: `make build`
-2. Open Chrome and navigate to `chrome://extensions/`
-3. Enable "Developer mode" (toggle in top-right corner)
-4. Click "Load unpacked" and select the project directory
-5. The extension will appear in your Chrome toolbar
+Anyone can confirm that a published zip was built from a given commit by
+running `make package` on that commit and comparing `out/SHA256SUMS`.
 
 ## Usage Guide
 
@@ -192,13 +180,13 @@ This extension includes comprehensive unit tests covering core functionality:
 
 ```bash
 # Run all tests
-npm test
+make test
 
-# Run tests with coverage report
-npm run test:coverage
+# Run tests and write the HTML coverage report to tests/coverage/
+make test-coverage
 
-# Run tests in watch mode for development
-npm run test:watch
+# Re-run the tests whenever src/ or tests/ change
+make test-watch
 ```
 
 ### Test Coverage
@@ -219,11 +207,12 @@ truth; Git tags mirror it as `vX.Y.Z`.
 
 ### Prerequisites
 
-- A working build toolchain: run `npm ci` first (the release builds, tests, and
-  lints before packaging).
+- Docker, git and make. The build runs in Docker, so no Node, npm or
+  TypeScript install is needed.
 - Optional: the [GitHub CLI](https://cli.github.com/) (`gh`), authenticated. If
-  present, a **draft** GitHub Release is created with the changelog and the
-  packaged `.zip`. If absent, the local tag and artifact are still produced.
+  present, a **draft** GitHub Release is created with the changelog, the
+  packaged `.zip` and its `SHA256SUMS`. If absent, the local tag and artifact
+  are still produced.
 
 ### Preview first (changes nothing)
 
@@ -247,14 +236,15 @@ Each release target, in order:
    (`main`/`master`), that the working tree is completely clean (no uncommitted
    *or* untracked files), and that the target tag does not already exist.
 2. **Bumps** `manifest.json` and `package.json` to the new version.
-3. **Validates** `manifest.json` — valid JSON, Manifest V3, required keys, and
-   the version matches the target.
-4. **Builds, tests, lints, and packages** the Web Store artifact via `make zip`
-   (`tabularasa-X.Y.Z.zip`, containing only runtime files).
+3. **Checks** that the manifest version matches the target.
+4. **Builds, tests, lints, validates, and packages** the Web Store artifact in
+   Docker via `make package` (`out/tabularasa-X.Y.Z.zip`, containing only
+   runtime files, plus `out/SHA256SUMS`).
 5. **Commits** the bump and creates an **annotated tag** whose message contains
    the changelog.
 6. **Pushes** the branch and tag, and creates a **draft GitHub Release** (when
-   `gh` is available) with the changelog and the `.zip` attached.
+   `gh` is available) with the changelog, the `.zip` and `SHA256SUMS`
+   attached.
 
 If any step before the commit fails, the working-tree version bump is rolled
 back automatically.
@@ -268,25 +258,6 @@ make release-minor RELEASE_ARGS="--no-publish"  # local commit + tag + zip only
 make release-major RELEASE_ARGS="--yes"         # skip the confirmation prompt
 make release-patch RELEASE_ARGS="--publish"     # publish the release (not draft)
 ```
-
-### Building in Docker (no Node toolchain on the host)
-
-The `--docker` flag runs the dependency-heavy steps — `npm ci`, build, test, and
-lint — inside a container instead of on your machine. Only the compiled `dist/`
-is written back to the host, where the extension is packaged. `node_modules`
-lives in a throwaway volume and never touches the host.
-
-```bash
-make release-patch RELEASE_ARGS="--docker"                 # build/test/lint in a container
-make release-minor RELEASE_ARGS="--docker --no-publish"    # combine with other flags
-make docker-build                                          # just the container build (dist/)
-make docker-zip                                            # container build + host packaging
-```
-
-With `--docker`, the release host needs only **docker, git, python3, zip, and
-make** (and `gh` for the GitHub release) — no Node, npm, or TypeScript install.
-The image defaults to `node:22-bookworm-slim`; override it with
-`NODE_IMAGE=node:24-bookworm-slim make docker-build`.
 
 The changelog groups commits by [Conventional Commit](https://www.conventionalcommits.org/)
 type (`feat`, `fix`, `docs`, …) and falls back to a plain bulleted list when the

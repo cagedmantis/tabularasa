@@ -10,18 +10,19 @@
 #   --no-publish    Do the local bump/commit/tag/package but do not push or
 #                   create a GitHub release.
 #   --publish       Publish the GitHub release immediately (default: draft).
-#   --docker        Run install/build/test/lint in a container (host needs no
-#                   Node/npm toolchain); package on the host.
+#
+# The build runs in Docker (see the Dockerfile): the host needs git, docker
+# and make, plus gh for the GitHub release.
 #
 # What a real release does, in order:
 #   1. Preflight: required tools, on release branch, clean tree, tag is free.
 #   2. Compute the target version from manifest.json and the changelog.
-#   3. Bump manifest.json + package.json, then validate the manifest (JSON +
-#      required Manifest V3 keys + version match).
-#   4. Build, test, lint, and package a Web Store zip via `make zip`.
+#   3. Bump manifest.json + package.json and check the manifest version.
+#   4. Build, test, lint, validate the manifest, and package a reproducible
+#      Web Store zip in Docker via `make package` (out/).
 #   5. Commit the bump and create an annotated tag containing the changelog.
 #   6. Push branch + tag, and (if `gh` is available) create a GitHub release
-#      with the changelog as notes and the zip attached.
+#      with the changelog as notes and the zip and SHA256SUMS attached.
 #
 # Safety: any failure before the commit rolls back the working-tree bump.
 set -eu
@@ -30,6 +31,7 @@ _dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 . "$_dir/lib.sh"
 
 ARTIFACT_BASE=tabularasa   # matches EXTENSION_NAME in the Makefile
+OUT_DIR=out                # matches OUT_DIR in the Makefile
 MANIFEST=manifest.json
 
 usage() {
@@ -38,7 +40,7 @@ usage() {
 
 # --- parse arguments ------------------------------------------------------
 BUMP=''
-DRY=0; ASSUME_YES=0; NO_PUBLISH=0; DRAFT=1; USE_DOCKER=0
+DRY=0; ASSUME_YES=0; NO_PUBLISH=0; DRAFT=1
 for arg in "$@"; do
 	case "$arg" in
 		major|minor|patch) BUMP=$arg ;;
@@ -46,7 +48,7 @@ for arg in "$@"; do
 		--yes|-y)    ASSUME_YES=1 ;;
 		--no-publish) NO_PUBLISH=1 ;;
 		--publish)   DRAFT=0 ;;
-		--docker)    USE_DOCKER=1 ;;
+		--docker)    warn "--docker is the default now; the build always runs in Docker" ;;
 		-h|--help)   usage; exit 0 ;;
 		*) die "unknown argument: '$arg' (see --help)" ;;
 	esac
@@ -54,7 +56,6 @@ done
 [ -n "$BUMP" ] || { usage; exit 2; }
 
 require_cmd git
-require_cmd python3
 cd "$(repo_root)"
 [ -f "$MANIFEST" ] || die "$MANIFEST not found at repo root"
 
@@ -62,7 +63,7 @@ cd "$(repo_root)"
 CUR=$(json_version "$MANIFEST")
 NEW=$(semver_bump "$BUMP" "$CUR")
 TAG="v$NEW"
-ARTIFACT="${ARTIFACT_BASE}-${NEW}.zip"
+ARTIFACT="${OUT_DIR}/${ARTIFACT_BASE}-${NEW}.zip"
 PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
 CHANGELOG=$("$_dir/changelog.sh" "${PREV_TAG:-}")
 
@@ -83,8 +84,7 @@ fi
 
 # --- preflight for a real release -----------------------------------------
 require_cmd make
-require_cmd zip
-if [ "$USE_DOCKER" -eq 1 ]; then require_cmd docker; else require_cmd npm; fi
+require_cmd docker
 assert_on_release_branch
 assert_clean_tree
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1 && die "tag $TAG already exists"
@@ -114,13 +114,8 @@ set_json_version "$MANIFEST" "$NEW"
 validate_manifest "$MANIFEST" "$NEW"
 
 # --- 2. build, test, lint, package (reuses the Makefile) ------------------
-if [ "$USE_DOCKER" -eq 1 ]; then
-	info "Building/testing/linting in Docker; packaging on the host"
-	make docker-zip
-else
-	info "Building, testing, and packaging via 'make zip'"
-	make zip
-fi
+info "Building, testing, and packaging in Docker via 'make package'"
+make package
 [ -f "$ARTIFACT" ] || die "expected artifact not produced: $ARTIFACT"
 
 # --- 3. commit + annotated tag --------------------------------------------
@@ -139,7 +134,7 @@ printf 'Release %s\n\n%s\n' "$TAG" "$CHANGELOG" | git tag -a "$TAG" -F -
 if [ "$NO_PUBLISH" -eq 1 ]; then
 	info "Local release complete (--no-publish). Not pushed."
 	info "To finish:  git push origin $(current_branch) --follow-tags"
-	info "            gh release create $TAG \"$ARTIFACT\" --title \"$TAG\" --notes \"...\""
+	info "            gh release create $TAG \"$ARTIFACT\" $OUT_DIR/SHA256SUMS --title \"$TAG\" --notes \"...\""
 	exit 0
 fi
 
@@ -154,11 +149,11 @@ if command -v gh >/dev/null 2>&1; then
 	_notes=$(mktemp "${TMPDIR:-/tmp}/tabularasa-notes.XXXXXX")
 	printf '%s\n' "$CHANGELOG" > "$_notes"
 	if [ "$DRAFT" -eq 1 ]; then _draft=--draft; else _draft=''; fi
-	if gh release create "$TAG" "$ARTIFACT" --title "$TAG" --notes-file "$_notes" $_draft; then
+	if gh release create "$TAG" "$ARTIFACT" "$OUT_DIR/SHA256SUMS" --title "$TAG" --notes-file "$_notes" $_draft; then
 		info "GitHub release created for $TAG"
 	else
 		warn "gh release failed — create it manually:"
-		warn "  gh release create $TAG \"$ARTIFACT\" --title \"$TAG\" --notes-file <notes>"
+		warn "  gh release create $TAG \"$ARTIFACT\" $OUT_DIR/SHA256SUMS --title \"$TAG\" --notes-file <notes>"
 	fi
 	rm -f "$_notes"
 else
