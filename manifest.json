@@ -21,6 +21,9 @@
       "128": "icons/icon-128.png"
     }
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+  },
   "background": {
     "service_worker": "dist/background.js"
   },

@@ -36,6 +36,6 @@ docker run --rm \
 	-e HOST_UID="$(id -u)" \
 	-e HOST_GID="$(id -g)" \
 	"$IMAGE" \
-	sh -uc 'npm ci --no-audit --no-fund && npm run build && npm test && npm run lint; rc=$?; chown -R "$HOST_UID:$HOST_GID" dist tests/coverage 2>/dev/null || true; exit $rc'
+	sh -uc 'npm ci --ignore-scripts --no-audit --no-fund && npm run build && npm test && npm run lint; rc=$?; chown -R "$HOST_UID:$HOST_GID" dist tests/coverage 2>/dev/null || true; exit $rc'
 
 info "Container build complete — dist/ is ready on the host for packaging."
