@@ -47,8 +47,8 @@ make screenshots  # regenerates screenshots/*.png if needed
 - **storage**: Required to save named browsing sessions locally
   (`chrome.storage.local`) so the user can restore them later. No data leaves the
   device.
-- **tabGroups**: Required to display and manage Chrome's native tab groups (create,
-  rename, color, ungroup) from the manager UI.
+- **tabGroups**: Required to display and manage Chrome's native tab groups (create
+  with a name and color, collapse or expand, ungroup) from the manager UI.
 - **favicon**: Required to show each tab's site icon in the list from Chrome's local
   favicon cache (`chrome-extension://<id>/_favicon/`). This avoids requesting icons
   from websites, so listing tabs causes no network traffic.
