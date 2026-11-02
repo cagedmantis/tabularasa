@@ -201,67 +201,138 @@ The test suite covers:
 
 ## Releasing
 
-Releases are automated through the `Makefile` and the POSIX helper scripts in
-[`scripts/`](scripts/). The version in `manifest.json` is the single source of
-truth; Git tags mirror it as `vX.Y.Z`.
+One command releases the extension everywhere:
+
+```bash
+make release
+```
+
+It asks once, then: GitHub release published, package submitted to the Chrome
+Web Store for review. It goes live when Google approves it.
+
+The version in `manifest.json` is the single source of truth; Git tags mirror
+it as `vX.Y.Z`. The bump is inferred from the
+[Conventional Commits](https://www.conventionalcommits.org/) since the last
+tag: a breaking change (`feat!:` or a `BREAKING CHANGE:` footer) is major, a
+`feat` minor, anything else patch.
 
 ### Prerequisites
 
-- Docker, git and make. The build runs in Docker, so no Node, npm or
-  TypeScript install is needed.
-- Optional: the [GitHub CLI](https://cli.github.com/) (`gh`), authenticated. If
-  present, a **draft** GitHub Release is created with the changelog, the
-  packaged `.zip` and its `SHA256SUMS`. If absent, the local tag and artifact
-  are still produced.
+- Docker, git, make, and the [GitHub CLI](https://cli.github.com/) (`gh`),
+  authenticated. No Node, npm or TypeScript install is needed.
+- The one-time store setup below.
 
 ### Preview first (changes nothing)
 
 ```bash
-make release-preview            # preview a minor bump (default)
-make release-preview BUMP=major # preview a major bump
-make changelog                  # print the changelog since the last tag
+make release-preview             # the inferred bump and the changelog
+make release-preview BUMP=major  # with a specific bump
+make changelog                   # the changelog since the last tag
 ```
 
-### Cut a release
+### What `make release` does
+
+On your machine ([`scripts/release.sh`](scripts/release.sh)):
+
+1. **Preflight** — on `main`, clean tree (no uncommitted *or* untracked files),
+   in sync with `origin/main`, CI passed for this exact commit (it waits if CI
+   is still running), the tag is free, and there are commits to release.
+2. **Bumps** `manifest.json` and `package.json`, then builds, tests, lints and
+   packages in Docker (`make package`) as a final local check.
+3. **Commits** the bump and creates an **annotated tag** whose message is the
+   changelog, then **pushes both together**.
+4. **Watches** the Release workflow and, when it finishes, checks that CI's
+   zip has the same SHA-256 as the one built locally.
+
+In GitHub Actions ([`.github/workflows/release.yml`](.github/workflows/release.yml)),
+started by the tag:
+
+1. **CI** — the full CI workflow: builds on x64 and ARM64, which must produce
+   the same zip, plus the dependency audit.
+2. **GitHub release** — a signed build provenance attestation for the zip,
+   then the release with the zip and `SHA256SUMS`, notes taken from the tag.
+3. **Chrome Web Store** — a short-lived Google token through Workload Identity
+   Federation (no stored keys), then [`tools/cws`](tools/cws) uploads the zip,
+   waits for the store to process it, and submits it for review.
+
+A failure before the push leaves no bump, commit or tag behind. A failure in
+the workflow can be re-run (`gh run rerun <id> --failed`): publishing the
+GitHub release and the store submission both skip what is already done.
+
+### Options
 
 ```bash
-make release-minor   # e.g. 1.2.3 -> 1.3.0
-make release-major   # e.g. 1.2.3 -> 2.0.0
-make release-patch   # e.g. 1.2.3 -> 1.2.4
+make release BUMP=minor                     # choose the bump
+make release-patch                          # same as BUMP=patch (also -minor, -major)
+make release RELEASE_ARGS="--no-publish"    # local commit + tag only, nothing pushed
+make release RELEASE_ARGS="--yes --no-wait" # no prompt; return after pushing
 ```
 
-Each release target, in order:
-
-1. **Preflight** — verifies required tools, that you are on the primary branch
-   (`main`/`master`), that the working tree is completely clean (no uncommitted
-   *or* untracked files), and that the target tag does not already exist.
-2. **Bumps** `manifest.json` and `package.json` to the new version.
-3. **Checks** that the manifest version matches the target.
-4. **Builds, tests, lints, validates, and packages** the Web Store artifact in
-   Docker via `make package` (`out/tabularasa-X.Y.Z.zip`, containing only
-   runtime files, plus `out/SHA256SUMS`).
-5. **Commits** the bump and creates an **annotated tag** whose message contains
-   the changelog.
-6. **Pushes** the branch and tag, and creates a **draft GitHub Release** (when
-   `gh` is available) with the changelog, the `.zip` and `SHA256SUMS`
-   attached.
-
-If any step before the commit fails, the working-tree version bump is rolled
-back automatically.
-
-### Flags
-
-Pass options through `RELEASE_ARGS`:
+### Verifying a release
 
 ```bash
-make release-minor RELEASE_ARGS="--no-publish"  # local commit + tag + zip only
-make release-major RELEASE_ARGS="--yes"         # skip the confirmation prompt
-make release-patch RELEASE_ARGS="--publish"     # publish the release (not draft)
+gh attestation verify tabularasa-X.Y.Z.zip -R cagedmantis/tabularasa
 ```
 
-The changelog groups commits by [Conventional Commit](https://www.conventionalcommits.org/)
-type (`feat`, `fix`, `docs`, …) and falls back to a plain bulleted list when the
-history does not use the convention.
+Or rebuild it: `git checkout vX.Y.Z && make package`, then compare
+`out/SHA256SUMS` with the release's.
+
+### One-time Chrome Web Store setup
+
+Publishing uses a Google service account that GitHub Actions impersonates
+through OpenID Connect, so no credential is stored in GitHub or on a laptop.
+The extension must already exist in the store (the first version is uploaded
+by hand in the [Developer Dashboard](https://chrome.google.com/webstore/devconsole)).
+
+1. **Google Cloud.** gcloud runs in Docker, so nothing is installed:
+
+   ```bash
+   alias gcloud='docker run --rm -it -v gcloud-config:/root/.config google/cloud-sdk:slim gcloud'
+   gcloud auth login
+   PROJECT=tabularasa-release            # an existing or new project
+   gcloud projects create "$PROJECT"     # skip if it exists
+   gcloud config set project "$PROJECT"
+   gcloud services enable chromewebstore.googleapis.com iamcredentials.googleapis.com sts.googleapis.com
+   gcloud iam service-accounts create cws-publisher --display-name="Chrome Web Store publisher"
+
+   # Trust GitHub's tokens, but only from this repository's main branch and v* tags.
+   gcloud iam workload-identity-pools create github --location=global
+   gcloud iam workload-identity-pools providers create-oidc tabularasa \
+     --location=global --workload-identity-pool=github \
+     --issuer-uri=https://token.actions.githubusercontent.com \
+     --attribute-mapping='google.subject=assertion.sub,attribute.repository=assertion.repository' \
+     --attribute-condition="assertion.repository_owner_id == '146817' && assertion.repository == 'cagedmantis/tabularasa' && (assertion.ref == 'refs/heads/main' || assertion.ref.startsWith('refs/tags/v'))"
+
+   PROJECT_NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)' | tr -d '\r')
+   gcloud iam service-accounts add-iam-policy-binding "cws-publisher@$PROJECT.iam.gserviceaccount.com" \
+     --role=roles/iam.workloadIdentityUser \
+     --member="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github/attribute.repository/cagedmantis/tabularasa"
+   echo "provider: projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/tabularasa"
+   ```
+
+2. **Chrome Web Store.** In the Developer Dashboard, under **Account**, add
+   `cws-publisher@<project>.iam.gserviceaccount.com` as the service account.
+   Note the **publisher ID** (Account / Settings) and the extension's **item ID**.
+
+3. **GitHub.** An environment that only `main` and `v*` tags can use, holding
+   the four settings as variables (none of them is a secret):
+
+   ```bash
+   R=repos/cagedmantis/tabularasa
+   gh api -X PUT $R/environments/chrome-web-store --input - <<'EOF'
+   {"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
+   EOF
+   gh api -X POST $R/environments/chrome-web-store/deployment-branch-policies -f name=main -f type=branch
+   gh api -X POST $R/environments/chrome-web-store/deployment-branch-policies -f name='v*' -f type=tag
+   gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER --env chrome-web-store --body "projects/<number>/locations/global/workloadIdentityPools/github/providers/tabularasa"
+   gh variable set GCP_SERVICE_ACCOUNT --env chrome-web-store --body "cws-publisher@<project>.iam.gserviceaccount.com"
+   gh variable set CWS_PUBLISHER_ID --env chrome-web-store --body "<publisher id>"
+   gh variable set CWS_EXTENSION_ID --env chrome-web-store --body "<item id>"
+   ```
+
+4. **Dry run.** `gh workflow run release.yml --ref main`, then watch it with
+   `gh run watch`. It runs CI and checks store access without publishing; the
+   store step prints the current published and submitted versions.
 
 ## Technologies Used
 
