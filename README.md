@@ -193,8 +193,12 @@ One command releases the extension everywhere:
 make release
 ```
 
-It asks once, then: GitHub release published, package submitted to the Chrome
-Web Store for review. It goes live when Google approves it.
+It asks once, then publishes the GitHub release. If the optional
+[Chrome Web Store automation](#optional-automatic-chrome-web-store-upload) is
+set up, it also submits the package to the store for review; otherwise it
+tells you to [upload it by hand](#uploading-to-the-chrome-web-store-by-hand),
+which takes a couple of minutes. Either way the update goes live when Google
+approves it.
 
 The version in `manifest.json` is the single source of truth; Git tags mirror
 it as `vX.Y.Z`. The bump is inferred from the
@@ -206,7 +210,7 @@ tag: a breaking change (`feat!:` or a `BREAKING CHANGE:` footer) is major, a
 
 - Docker, git, make, and the [GitHub CLI](https://cli.github.com/) (`gh`),
   authenticated. No Node, npm or TypeScript install is needed.
-- The one-time store setup below.
+- Optional: the one-time store setup below, to automate the store upload.
 
 ### Preview first (changes nothing)
 
@@ -237,7 +241,8 @@ started by the tag:
    the same zip, plus the dependency audit.
 2. **GitHub release** — a signed build provenance attestation for the zip,
    then the release with the zip and `SHA256SUMS`, notes taken from the tag.
-3. **Chrome Web Store** — a short-lived Google token through Workload Identity
+3. **Chrome Web Store** (only when the repository variable `CWS_ENABLED` is
+   `true`; otherwise skipped) — a short-lived Google token through Workload Identity
    Federation (no stored keys), then [`tools/cws`](tools/cws) uploads the zip,
    waits for the store to process it, and submits it for review.
 
@@ -263,9 +268,31 @@ gh attestation verify tabularasa-X.Y.Z.zip -R cagedmantis/tabularasa
 Or rebuild it: `git checkout vX.Y.Z && make package`, then compare
 `out/SHA256SUMS` with the release's.
 
-### One-time Chrome Web Store setup
+### Uploading to the Chrome Web Store by hand
 
-Publishing uses a Google service account that GitHub Actions impersonates
+Without the automation below, finish each release in the
+[Developer Dashboard](https://chrome.google.com/webstore/devconsole):
+
+1. Open Tabularasa → **Package** → **Upload new package**.
+2. Choose `out/tabularasa-X.Y.Z.zip` from your `make release` run, or the zip
+   attached to the GitHub release (they are identical; `make release` checks).
+3. Click **Submit for review**.
+
+### Updating the store listing
+
+The description, screenshots and other listing fields are edited in the
+Developer Dashboard (**Store listing** tab); the Chrome Web Store API cannot
+change them, so this is manual with or without the automation. Paste the
+plain-text block from [`CHROME_STORE_DESCRIPTION.md`](CHROME_STORE_DESCRIPTION.md)
+into **Description**, then submit; listing changes go through review too, and
+can be submitted on their own or together with a new package. The short
+summary is different: it is `"description"` in `manifest.json`, so it ships
+inside the package and changes with the next release.
+
+### Optional: automatic Chrome Web Store upload
+
+This needs a Google Cloud project (free; the Chrome Web Store API is only
+reachable through one). Publishing uses a Google service account that GitHub Actions impersonates
 through OpenID Connect, so no credential is stored in GitHub or on a laptop.
 The extension must already exist in the store (the first version is uploaded
 by hand in the [Developer Dashboard](https://chrome.google.com/webstore/devconsole)).
@@ -316,7 +343,11 @@ by hand in the [Developer Dashboard](https://chrome.google.com/webstore/devconso
    gh variable set CWS_EXTENSION_ID --env chrome-web-store --body "<item id>"
    ```
 
-4. **Dry run.** `gh workflow run release.yml --ref main`, then watch it with
+4. **Turn it on.** `gh variable set CWS_ENABLED --body true` (a repository
+   variable, not an environment one). Unset it with
+   `gh variable delete CWS_ENABLED` to go back to uploading by hand.
+
+5. **Dry run.** `gh workflow run release.yml --ref main`, then watch it with
    `gh run watch`. It runs CI and checks store access without publishing; the
    store step prints the current published and submitted versions.
 
