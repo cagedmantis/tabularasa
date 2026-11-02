@@ -1,115 +1,83 @@
 # Chrome Web Store Description for Tabularasa
 
-## Enhanced Description
+The text for the Store Listing tab of the Developer Dashboard. See
+`STORE_SUBMISSION.md` for the other tabs.
 
-**Tabularasa** is a tab and window manager for Chrome. It opens in its own tab and shows every tab from every window in one searchable list.
+## Summary
 
-See every tab from every window in one place, find the one you want by typing, clean up duplicates and whole domains, and save sets of tabs to come back to later. Everything happens inside your browser.
+Chrome takes the summary from `"description"` in `manifest.json` (limit: 132
+characters; the current one is 128):
 
-## Key Features
+> Advanced tab and window manager. Group, search, and bulk-manage tabs, save sessions, and remove duplicates - all stored locally.
 
-### 🗂️ **Smart Tab Organization**
-- **Three Views**: See your tabs grouped by window, by Chrome tab group, or by website domain
-- **Chrome Tab Groups**: Full integration with Chrome's native tab grouping system
-- **Visual Indicators**: Clear highlighting for active, pinned, and audible tabs
+## Detailed Description
 
-### 🔍 **Search**
-- **Search As You Type**: Filter the list by title or URL
-- **Smart Filtering**: Filter by active tabs, pinned tabs, audible tabs, or grouped tabs
-- **Case-Insensitive**: Search works regardless of capitalization
-- **Partial Matching**: Find tabs with partial keywords or URL fragments
+The store shows this field as plain text: Markdown is not rendered, so the
+text below uses none. Paste everything inside the block, as it is.
 
-### ⚡ **Bulk Operations**
-- **Multi-Select**: Select multiple tabs across different domains and windows
-- **Bulk Actions**: Close, group, ungroup, or move multiple tabs at once
-- **Smart Grouping**: Create tab groups from selected tabs with a name and color, one group per window
-- **Window Management**: Move selected tabs into a new window
+Before pasting, check that every statement is still true of the version being
+submitted. In particular, "nothing leaves your device" and the permission list
+must match `manifest.json` and `PRIVACY_POLICY.md`.
 
-### 💾 **Session Management**
-- **Save Sessions**: Preserve your browsing state with custom session names
-- **Quick Restore**: Reopen a session's windows with their tabs in order, including pinned tabs and tab groups
-- **Selective Saving**: Save current window only or all windows
-- **Session History**: Keep track of multiple saved sessions with timestamps
+```text
+Tabularasa is a tab and window manager for Chrome. It opens in its own tab and shows every tab from every window in one searchable list.
 
-### 🧹 **Advanced Cleanup**
-- **Duplicate Detection**: Find tabs open more than once and close the extras, keeping pinned, active, and playing copies; you see the list before anything closes
-- **Bulk Closing**: Close multiple tabs, entire domains, or tab groups at once
-- **Domain Cleanup**: Close every tab from one website in a click
-- **Undo Protection**: Large closes ask first, and closed tabs can be brought back with Undo
+Find the tab you want by typing, clean up duplicates and whole websites at once, and save sets of tabs to come back to later. Everything happens inside your browser.
 
-### 🪟 **Multi-Window Support**
-- **Cross-Window View**: See and manage tabs from all Chrome windows in one place
-- **Window-Specific Actions**: Organize tabs within specific windows
-- **Window Creation**: Create new windows with selected tabs
-- **Unified Interface**: Single interface for all tab management tasks
+VIEW AND FIND TABS
+- Three views: tabs grouped by window, by Chrome tab group, or by website domain
+- Search as you type, by title or address. Capitalization does not matter, and part of a word or address is enough
+- Filter to active, pinned, audible (playing sound) or grouped tabs
+- Active, pinned and audible tabs are marked in the list
+- The list updates live as tabs open, close and move
 
-## Perfect For
+WORK ON MANY TABS AT ONCE
+- Select tabs with checkboxes, or a whole section with its Select All button, across windows and domains
+- Close, group, ungroup, or move the selected tabs to a new window
+- Turn the selection into a Chrome tab group with a name and color (one group per window)
+- Pin, mute, or switch to any tab from the list
+- Keyboard shortcuts for search, select all and grouping
 
-- **Developers** keeping documentation, repositories and tools open side by side
-- **Researchers** collecting sources by topic and returning to them later
-- **Anyone** who works with many tabs and windows and wants them under control
+CHROME TAB GROUPS
+- Create groups with a name and color, collapse or expand them, and ungroup them, without leaving the list
 
-## Privacy & Security
+CLEAN UP
+- Close Duplicates finds tabs open more than once at the same address and closes the extra copies. You see the list before anything closes. One copy of each is kept, preferring a pinned, active, playing or grouped tab, then the one used most recently
+- Close every tab of one window, tab group or website with one button
+- Closing 10 or more tabs at once, or tabs hidden by the current search or filter, asks first
+- Closed tabs can be reopened with Undo for about ten seconds
 
-✅ **100% Local Processing**: All data stays on your device - no external servers
-✅ **Nothing Leaves Your Device**: Nothing is sent to the developer or anyone else; the extension makes no network requests at all
-✅ **Local Storage Only**: Sessions you save stay in Chrome's local extension storage on your device
-✅ **No Incognito Access**: The extension cannot run in or see incognito windows
-✅ **Minimal Permissions**: No access to page content, no host permissions, no content scripts
-✅ **No Tracking**: No analytics, no tracking, no third-party integrations
-✅ **Open Source**: Transparent code that respects your privacy
+SAVED SESSIONS
+- Save the current window or all windows under a name you choose
+- Restoring reopens each window with its tabs in order, including pinned and muted tabs and tab groups
+- Keep several named sessions, each showing the date it was saved; delete them whenever you like
+- Sessions keep web pages and local files only; browser pages such as settings are not saved
 
-## Why Choose Tabularasa?
+PRIVACY
+- Nothing leaves your device: the extension makes no network requests, has no servers, and contains no analytics or tracking
+- Saved sessions stay in Chrome's local extension storage on your device. Uninstalling the extension deletes them
+- It cannot run in, see, or save incognito windows
+- Permissions: tabs, tab groups, storage and favicon. No host permissions and no content scripts, so it cannot read or change the content of any web page
+- About Chrome's install warning: Chrome describes the tabs permission as "Read your browsing history", because the addresses of open tabs are browsing activity. Tabularasa sees only the tabs that are open now, not the pages you visited before
+- Privacy policy: https://github.com/cagedmantis/tabularasa/blob/main/PRIVACY_POLICY.md
 
-### 🚀 **Lightweight**
-- No background work: the service worker only runs when you click the toolbar button
-- The list updates live as tabs change, and pauses while the manager is not visible
+LIGHTWEIGHT
+- No background activity: the background service worker wakes only when you click the toolbar button (and when the extension is installed or updated)
+- The list stops updating while the manager tab is hidden and catches up when you return to it
 
-### 🎨 **User Experience**
-- Clean, intuitive interface that's easy to learn
-- Keyboard shortcuts for power users
-- Responsive design that works on all screen sizes
+OPEN SOURCE AND FREE
+- Open source under the Apache 2.0 license: https://github.com/cagedmantis/tabularasa
+- Automated tests run against the extension's real code on every change
+- Free, with no premium tier, account, or ads
 
-### 🔧 **Reliability**
-- Built with modern web technologies (TypeScript, Manifest V3)
-- Comprehensive error handling and recovery
-- Automated tests run against the real extension code on every change
+GETTING STARTED
+1. Click the Tabularasa icon in the toolbar. The manager opens in a new tab, or switches to it if it is already open
+2. Type in the search box, or use the view button to switch between window, tab group and domain views
+3. Tick tabs to work on several at once
+4. Use Save Session to keep the current window or all windows for later
 
-### 🌟 **Free**
-- Free to use, with no premium tier, account, or ads
+SUPPORT
+Questions, bug reports and feature requests: https://github.com/cagedmantis/tabularasa/issues
 
-## Installation & Setup
-
-1. **Install**: Click "Add to Chrome" to install the extension
-2. **Launch**: Click the Tabularasa icon in your Chrome toolbar
-3. **Start Organizing**: The extension automatically detects all your open tabs
-4. **Pick a View**: Switch between window, tab group, and domain views
-5. **Save Sessions**: Create your first saved session for easy restoration
-
-## Getting Started
-
-### First Time Use
-1. Open the extension and explore your current tabs, grouped by window
-2. Try the search feature to find specific tabs quickly
-3. Select multiple tabs and experiment with bulk operations
-4. Save your current session to experience the restore functionality
-
-### Pro Tips
-- Use the checkboxes, or a section's Select All, to select tabs across windows and domains
-- Create descriptive session names for easy identification
-- Regularly use "Close Duplicates" to clean up redundant tabs
-- Pin frequently used tabs for quick access
-- Use the refresh button to update the tab list after external changes
-
-## Support & Feedback
-
-We're committed to making Tabularasa the best tab management solution for Chrome. Your feedback helps us improve!
-
-- **Questions or bugs?** https://github.com/cagedmantis/tabularasa/issues
-- **Feature requests?** Open an issue, or share your ideas in the reviews section
-
----
-
-**Transform your browsing experience today. Install Tabularasa and discover the power of organized tab management.**
-
-*Requires Chrome 104 or later | Manifest V3 | No external dependencies*
+Requires Chrome 104 or later.
+```
