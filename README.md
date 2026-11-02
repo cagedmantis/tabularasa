@@ -4,56 +4,53 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-4285F4?logo=google-chrome&logoColor=white)](https://chromewebstore.google.com/detail/tabularasa/jogliigjiepbbemjbfefphhknoemhilp)
 
-Tabularasa is a powerful Chrome extension that provides comprehensive tab and window management capabilities. It offers an intuitive interface for organizing, searching, and managing your browsing sessions with advanced features like session saving, duplicate detection, and multi-window operations.
+Tabularasa is a tab and window manager for Chrome. It opens in its own tab and shows every tab from every window in one searchable list, so you can find tabs, act on many at once, clean up duplicates, and save sets of tabs to reopen later. Everything happens inside your browser: the extension makes no network requests, and the sessions you save stay in Chrome's local storage on your device (see the [privacy policy](PRIVACY_POLICY.md)).
 
 ## Features
 
-### Core Tab Management
-- **Unified Tab View**: Display all tabs from all open Chrome windows in a single, organized interface
-- **Smart Grouping**: Group tabs by window or by website domain with easy toggle switching
-- **Real-time Updates**: Live updates as tabs are created, modified, or closed
-- **Active Tab Highlighting**: Clearly identifies the currently active tab across all windows
+### Views
+- **One list for every window**: all tabs from all normal windows (incognito windows are never shown)
+- **Three views**: group the list by window, by Chrome tab group, or by website domain; the view button cycles through them
+- **Live updates**: the list follows tabs as they open, close, move or change, and catches up when you return to a hidden manager tab
+- **Markers** for the active, pinned and audible tabs
 
-### Advanced Search and Filtering
-- **Dynamic Search**: Real-time filtering of tabs by title or URL (case-insensitive)
-- **Instant Results**: Search results update as you type with highlighting
-- **Clear Search**: One-click search clearing for quick reset
+### Search and Filter
+- **Search as you type** by title or URL, case-insensitive, with a button to clear it
+- **Filter** to active, pinned, audible or grouped tabs
 
 ### Tab Actions
-- **Switch to Tab**: Click any tab to instantly switch to it and focus its window
-- **Close Individual Tabs**: Quick close button for each tab with visual feedback
-- **Pin/Unpin Tabs**: Toggle pin status directly from the manager
-- **Mute/Unmute Tabs**: Control audio playback without leaving the manager
-- **Multi-selection**: Select multiple tabs using checkboxes for bulk operations
+- **Switch to a tab**: click it to activate it and focus its window
+- **Pin/unpin** and **mute/unmute** from the list
+- **Close** a single tab, or every tab in a window, tab group or domain with its section's **Close All**
+- **New tab** button
 
-### Window Management
-- **Close All Tabs in Window**: Close entire window groups with confirmation
-- **Move to New Window**: Create new windows with selected tabs
-- **Move to Existing Window**: Transfer tabs between existing windows
-- **Duplicate Window Detection**: Identify and close duplicate windows automatically
-- **New Tab Creation**: Create new blank tabs with a single click
+### Bulk Operations
+- **Select** tabs with checkboxes, a section's **Select All**, or the global **Select All** (which selects the tabs the search and filter show)
+- **Close**, **group**, **ungroup**, or **move to a new window** the selected tabs
+- **Group** the selection into a named, colored Chrome tab group, one group per window
 
-### Session Management
-- **Save Sessions**: Preserve current window state or all windows for later restoration
-- **Named Sessions**: Give meaningful names to saved sessions for easy identification
-- **Session Restoration**: Restore complete browsing sessions with all tab properties
-- **Session Management**: View, open, and delete saved sessions from dedicated interface
-- **Tab State Preservation**: Maintains pinned and muted states when restoring sessions
+### Chrome Tab Groups
+- Create groups with a name and color, **collapse/expand** them, and **ungroup** them from the list
 
-### Duplicate Management
-- **Duplicate Detection**: Automatically identify tabs with identical URLs
-- **Smart Closing**: Keep most recently accessed tabs when closing duplicates
-- **Bulk Operations**: Close multiple duplicates at once with single action
+### Duplicates
+- **Close Duplicates** finds tabs open at the same URL and shows the list before closing anything
+- It keeps one copy of each, preferring a pinned, then active, audible or grouped tab, then the most recently used one
 
-### Advanced Features
-- **Keyboard Shortcuts**:
-  - `Ctrl/Cmd + F`: Focus search
-  - `Ctrl/Cmd + A`: Select all tabs
-  - `Ctrl/Cmd + N`: Create new tab
-- **Performance Optimized**: Handles large numbers of tabs efficiently
-- **Responsive Design**: Clean, modern interface that works at any size
-- **Status Notifications**: Clear feedback for all operations
-- **Error Handling**: Graceful handling of errors with user-friendly messages
+### Safety
+- Closing 10 or more tabs at once, or tabs hidden by the current search or filter, asks first
+- Closed tabs can be reopened with **Undo** for about ten seconds
+
+### Sessions
+- **Save** the current window or all windows under a name
+- **Restore** reopens each window with its tabs in order, including pinned and muted state and tab groups
+- **Manage** saved sessions (open or delete) in the Sessions view
+- Only web pages (`http`, `https`) and local files (`file`) are saved; browser and extension pages are left out
+
+### Keyboard Shortcuts
+Active when the focus is not in a text field:
+- `Ctrl/Cmd + F`: focus the search box
+- `Ctrl/Cmd + A`: select all tabs the search and filter show
+- `Ctrl/Cmd + G`: group the selected tabs
 
 ## Installation Guide (Local Testing)
 
@@ -145,34 +142,23 @@ running `make package` on that commit and comparing `out/SHA256SUMS`.
 ## Usage Guide
 
 ### Basic Navigation
-1. **Open Extension**: Click the Tabularasa icon in Chrome toolbar
-2. **Search Tabs**: Type in the search box to filter tabs by title or URL
-3. **Switch Views**: Toggle between "Windows" and "Domains" grouping
-4. **Switch to Tab**: Click any tab title to navigate to it
+1. **Open the manager**: click the Tabularasa icon in the toolbar. It opens in a new tab, or switches to the manager tab if one is already open
+2. **Search**: type in the search box to filter tabs by title or URL
+3. **Switch views**: the view button cycles between window, tab group and domain views
+4. **Switch to a tab**: click its title
 
 ### Tab Management
-1. **Select Tabs**: Check boxes next to tabs for bulk operations
-2. **Pin/Unpin**: Click the pin icon to change tab pin status
-3. **Mute/Unmute**: Click the sound icon to control audio
-4. **Close Tabs**: Click the × button to close individual tabs
-5. **Close Groups**: Use "Close All" button in group headers
+1. **Select tabs**: tick the checkboxes for bulk operations
+2. **Pin/unpin** and **mute/unmute**: use the buttons on the tab's row
+3. **Close tabs**: click a tab's × button, or a section's **Close All**
+4. **Group**: select tabs, click **Group Selected**, choose a name and color
+5. **Move**: select tabs and click **Move to New Window**
+6. **Close duplicates**: click **Close Duplicates**, review the list, confirm
 
-### Window Operations
-1. **Move to New Window**: Select tabs and click "Move to New Window"
-2. **Move to Existing Window**: Select tabs, click "Move to Existing Window", choose destination
-3. **Close Duplicates**: Click "Close Duplicates" to remove tabs with identical URLs
-
-### Session Management
-1. **Save Session**: Click "Save Session" button
-2. **Name Session**: Enter a descriptive name
-3. **Choose Scope**: Select "Current Window" or "All Windows"
-4. **Restore Session**: Go to Sessions view and click "Open" on saved session
-5. **Delete Session**: Click "Delete" to remove unwanted sessions
-
-### Keyboard Shortcuts
-- **Ctrl/Cmd + F**: Focus search box
-- **Ctrl/Cmd + A**: Select all visible tabs
-- **Ctrl/Cmd + N**: Create new tab
+### Sessions
+1. **Save**: click **Save Session**, enter a name, choose **Current Window** or **All Windows**
+2. **Restore**: open the Sessions view and click **Open** on a saved session
+3. **Delete**: click **Delete** on a session you no longer want
 
 ## Running Tests
 
@@ -265,12 +251,11 @@ history does not use the convention.
 
 ## Technologies Used
 
-- **Chrome Extension APIs**: `chrome.tabs`, `chrome.windows`, `chrome.storage`, `chrome.action`
-- **HTML5**: Semantic markup with accessibility features
-- **CSS3**: Modern styling with flexbox and responsive design
-- **Vanilla JavaScript**: ES6+ features for clean, maintainable code
-- **Jest**: JavaScript testing framework with jsdom environment
-- **ESLint**: Code linting for consistency and quality
+- **Chrome Extension APIs** (Manifest V3): `chrome.tabs`, `chrome.windows`, `chrome.tabGroups`, `chrome.storage.local`, `chrome.action`, and Chrome's local favicon cache
+- **TypeScript**: compiled by the native TypeScript 7 compiler, with no runtime dependencies or bundler
+- **HTML and CSS**: one manager page, no frameworks
+- **Jest** with jsdom, and **ESLint**, for tests and linting (development only; nothing from npm ships)
+- **Go**: the packaging tool that validates the manifest and writes the reproducible zip
 
 ## Architecture
 
@@ -306,10 +291,10 @@ tabularasa/
    - Stays asleep otherwise: the manager page listens to tab, window and
      group events itself
 
-3. **Storage System**:
-   - Local storage for session data
-   - Efficient serialization/deserialization
-   - Data validation and error handling
+3. **Storage**:
+   - Saved sessions in `chrome.storage.local`, on the device only
+   - Malformed stored data is treated as no sessions rather than trusted
+   - The open manager tab keeps its view, filter and search text in `sessionStorage`
 
 4. **UI Components**:
    - Full-page manager UI
@@ -319,29 +304,32 @@ tabularasa/
 
 ## Security and Privacy
 
-- **Local Storage Only**: All data is stored locally in the browser using Chrome's storage API
-- **No External Requests**: Extension does not communicate with external servers
-- **Minimal Permissions**: Only requests necessary Chrome permissions
-- **XSS Protection**: All user input is properly escaped and sanitized
-- **Content Security Policy**: Follows Chrome extension security best practices
+- **No network requests**: the extension contacts no server; favicons come from Chrome's local cache
+- **Local storage only**: saved sessions live in `chrome.storage.local`; nothing is synced or sent anywhere
+- **No analytics or tracking**, and no remote code: everything that runs ships in the package
+- **Minimal permissions**: `tabs`, `tabGroups`, `storage` and `favicon`; no host permissions and no content scripts
+- **No incognito access**: the manifest declares `"incognito": "not_allowed"`
+- **Strict Content Security Policy** on extension pages; tab titles, URLs and session names are set with `textContent`, never parsed as HTML
+- **Restored URLs are restricted** to `http`, `https` and `file`
+
+See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) and [SECURITY.md](SECURITY.md).
 
 ## Future Enhancements
 
-- **Export/Import**: Backup and restore session data
-- **Advanced Search**: Regular expression and boolean search operators
-- **Custom Themes**: User-configurable color themes
-- **Statistics**: Usage analytics and browsing patterns
-- **Cloud Sync**: Optional cloud synchronization of sessions
-- **Automation**: Rules-based tab management
-- **Integration**: Support for other browsers and bookmark management
+Ideas, not commitments. All of them would stay local to the device:
 
-## Performance Considerations
+- **Export/Import**: back up and restore saved sessions as a file
+- **Advanced Search**: regular expressions and boolean operators
+- **Custom Themes**: user-configurable colors
+- **Automation**: rules-based tab management
 
-- **Efficient Rendering**: Virtual scrolling for large tab counts
-- **Debounced Search**: Optimized search with input debouncing
-- **Memory Management**: Proper cleanup of event listeners
-- **Lazy Loading**: On-demand loading of tab favicons
-- **Caching Strategy**: Intelligent caching of frequently accessed data
+## Performance
+
+- **Coalesced updates**: bursts of tab events cause at most one refresh every 150 ms
+- **Row reuse**: rows whose content did not change are kept instead of rebuilt
+- **Debounced search**: the list is filtered 100 ms after typing stops
+- **Paused when hidden**: a hidden manager tab does no work and catches up when shown
+- **Idle service worker**: the background worker runs only on install/update and toolbar clicks
 
 ## Troubleshooting
 
@@ -353,19 +341,16 @@ tabularasa/
    - Verify manifest.json is valid
 
 2. **Tabs Not Updating**:
-   - Refresh the extension from chrome://extensions
-   - Check that tabs permission is granted
-   - Verify background script is running
+   - Click the refresh button in the manager
+   - Reload the extension from chrome://extensions
+   - Check the manager tab's DevTools console for errors (the manager page, not the service worker, listens for tab events)
 
 3. **Sessions Not Saving**:
-   - Check Chrome storage permissions
-   - Verify local storage is not full
-   - Test with smaller session sizes
+   - Browser pages (such as `chrome://` pages) are never saved; if nothing is left, the manager says "No tabs that can be saved"
+   - Check the manager tab's DevTools console for storage errors
 
 4. **Performance Issues**:
-   - Reduce number of open tabs
-   - Clear extension storage data
-   - Check for memory leaks in console
+   - Open an issue with the number of tabs and windows, and a DevTools performance profile of the manager tab if you can
 
 ### Debug Mode
 Enable debug logging by opening Chrome DevTools on the manager tab and the background service worker (from chrome://extensions).
@@ -389,4 +374,4 @@ For issues, questions, or feature requests, please use the GitHub Issues page.
 
 ---
 
-**Note**: This extension is designed for productivity and privacy. All operations are performed locally within your browser, ensuring your browsing data remains secure and private.
+**Note**: All operations happen locally in your browser. The extension makes no network requests, and saved sessions never leave your device.

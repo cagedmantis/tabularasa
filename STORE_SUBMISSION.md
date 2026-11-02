@@ -4,20 +4,20 @@ Everything needed to fill out the [Developer Dashboard](https://chrome.google.co
 for Tabularasa. Generate the upload artifacts first:
 
 ```bash
-make zip          # builds, tests, lints, then creates tabularasa-<version>.zip
+make package      # builds, tests, lints, then creates out/tabularasa-<version>.zip
 make screenshots  # regenerates screenshots/*.png if needed
 ```
 
 ## Upload
 
-- **Package**: `tabularasa-<version>.zip` (created in the repo root by `make zip`)
+- **Package**: `out/tabularasa-<version>.zip` (created by `make package`)
 
 ## Store Listing tab
 
 - **Name**: Tabularasa
 - **Summary** (from manifest description):
   > Advanced tab and window manager. Group, search, and bulk-manage tabs, save sessions, and remove duplicates - all stored locally.
-- **Description**: use the "Enhanced Description" section of `CHROME_STORE_DESCRIPTION.md`
+- **Description**: paste the plain-text block under "Detailed Description" in `CHROME_STORE_DESCRIPTION.md`
 - **Category**: Productivity → Tools
 - **Language**: English
 
@@ -93,7 +93,7 @@ contents of `PRIVACY_POLICY.md` is fine too.)
 ## Pre-submission checklist
 
 - [ ] `make verify` passes
-- [ ] `make zip` produced `tabularasa-<version>.zip`
+- [ ] `make package` produced `out/tabularasa-<version>.zip`
 - [ ] Permissions in `manifest.json`, the justifications above, and `PRIVACY_POLICY.md` all list the same permissions
 - [ ] Every feature named in `CHROME_STORE_DESCRIPTION.md` exists in this version
 - [ ] ZIP tested: load `out/extension/` as an unpacked extension in Chrome and click through the UI

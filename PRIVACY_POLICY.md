@@ -1,7 +1,7 @@
 # Privacy Policy for Tabularasa Chrome Extension
 
 **Effective Date**: July 2025  
-**Last Updated**: September 2026
+**Last Updated**: November 2026
 
 ## Overview
 
@@ -9,7 +9,7 @@ Tabularasa is a Chrome extension that helps you manage your browser tabs and win
 
 ## Summary
 
-- Tabularasa **sends nothing to the developer or to any third party**: it has no servers and includes no analytics, tracking, or third-party code.
+- Tabularasa **sends nothing to the developer or to any third party**: it has no servers and includes no analytics, tracking, or third-party code. Your data is never sold or transferred.
 - Versions after 1.0.1 make **no network requests at all**. Versions 1.0.0 and 1.0.1 made one kind of request: they loaded each tab's icon from its website (see "Favicons").
 - It **reads** information about your open tabs in order to show and manage them.
 - It **stores** only two things, both on your device: the sessions you choose to save, and the view settings of an open manager tab.
@@ -17,8 +17,8 @@ Tabularasa is a Chrome extension that helps you manage your browser tabs and win
 ## What Tabularasa Reads
 
 ### Tab and Window Information
-- **What**: For every open tab: its title, URL, favicon address, position, window, and state (active, pinned, muted, audible, tab group). For every window: its type and whether it is focused.
-- **Why**: To list, search, filter, group, move, close, and de-duplicate your tabs.
+- **What**: For every open tab: its title, URL, favicon address, position, window, state (active, pinned, muted, audible, tab group), and when it was last used. For every window: its type and whether it is focused.
+- **Why**: To list, search, filter, group, move, close, and de-duplicate your tabs. (The last-used time is used only to choose which copy of a duplicate tab to keep, and is never saved.)
 - **Where it goes**: It is held in the memory of the manager page while that page is open, and discarded when the page closes. It is written to disk only as part of a session you save (see below).
 
 ### Chrome Tab Groups
@@ -32,14 +32,14 @@ Tabularasa is a Chrome extension that helps you manage your browser tabs and win
 - **Versions 1.0.0 and 1.0.1**: Icons were loaded directly from each tab's favicon address, which is an ordinary image request from your browser to that website (or its CDN). Nothing was sent to the developer. This was the only network traffic the extension caused, and it is why later versions use the local cache instead.
 
 ### Incognito Windows
-- **Versions after 1.0.1**: Tabularasa declares `"incognito": "not_allowed"` in its manifest. Chrome therefore does not let it run in, see, or save incognito windows and tabs, and it can no longer be enabled for Incognito. If you had enabled "Allow in Incognito" for an earlier version, that setting stops applying once the update installs
-- **Versions 1.0.0 and 1.0.1**: If you had enabled "Allow in Incognito", incognito tabs were listed in the manager, and a session saved with "All Windows" included their titles and URLs. Those saved sessions stay in local storage on your device until you delete them; updating does not remove them. If this applies to you, review your saved sessions in the Sessions view and delete any you do not want to keep
-- **Why**: Private browsing should never appear in a tab list or be written to a saved session
+- **Versions after 1.0.1**: Tabularasa declares `"incognito": "not_allowed"` in its manifest. Chrome therefore does not let it run in, see, or save incognito windows and tabs, and it can no longer be enabled for Incognito. If you had enabled "Allow in Incognito" for an earlier version, that setting stops applying once the update installs.
+- **Versions 1.0.0 and 1.0.1**: If you had enabled "Allow in Incognito", incognito tabs were listed in the manager, and a session saved with "All Windows" included their titles and URLs. Those saved sessions stay in local storage on your device until you delete them; updating does not remove them. If this applies to you, review your saved sessions in the Sessions view and delete any you do not want to keep.
+- **Why**: Private browsing should never appear in a tab list or be written to a saved session.
 
 ## What Tabularasa Stores
 
 ### Saved Sessions
-- **What**: When you choose **Save Session**, Tabularasa stores the session name and date and, for each tab in it, the URL, title, pinned and muted state, and tab group (name and color). 
+- **What**: When you choose **Save Session**, Tabularasa stores the session name and date, which window each tab was in, and, for each tab, its URL, title, pinned and muted state, and tab group (name and color).
 - **Which pages**: Versions after 1.0.1 save only web pages (`http`, `https`) and local files (`file`); browser pages and other extensions' pages are left out. Versions 1.0.0 and 1.0.1 saved the address of every tab in the window, and sessions saved by them keep those addresses until you delete the session (later versions simply skip them when restoring).
 - **Where**: In `chrome.storage.local`, which is a storage area on your device that only this extension can read through Chrome.
 - **How long**: Until you delete the session in the Sessions view, or uninstall the extension.
@@ -54,7 +54,7 @@ Tabularasa is a Chrome extension that helps you manage your browser tabs and win
 - **How long**: For the life of that tab. Chrome may bring it back together with the tab if you reopen a closed tab, duplicate the tab, or restore your previous browsing session. It is never written to `chrome.storage`.
 
 ### Undo
-- After you close tabs from the manager, their URLs are kept in memory for as long as the **Undo** message is shown (normally about ten seconds) so that they can be reopened. This is never written to disk.
+- After you close tabs from the manager, their URLs are kept in memory for as long as the **Undo** message is shown (normally about ten seconds) so that they can be reopened. They are never written to disk.
 
 ## What Tabularasa Does NOT Do
 
@@ -115,7 +115,7 @@ Tabularasa does not collect personal information from anyone, including children
 
 ## Limited Use
 
-Tabularasa's use of information received from Chrome APIs adheres to the Chrome Web Store User Data Policy, including the Limited Use requirements. Tab information is used only to provide the tab-management features described above; it is never transferred to anyone, never used for advertising, never used to determine creditworthiness, and never read by a human other than you.
+Tabularasa's use of information received from Chrome APIs adheres to the Chrome Web Store User Data Policy, including the Limited Use requirements. Tab information is used only to provide the tab-management features described above; it is never sold or transferred to anyone, never used for advertising, never used to determine creditworthiness or for lending, and never read by a human other than you.
 
 ## Verification
 
@@ -124,6 +124,7 @@ You do not have to take this on trust:
 - **Read the code**: The extension is open source at https://github.com/cagedmantis/tabularasa
 - **Watch the network**: Open DevTools on the manager tab and on the service worker. With versions after 1.0.1 there are no requests to any web address; the only entries are `chrome-extension://` URLs, which are the extension's own files and cached icons inside your browser.
 - **Inspect storage**: See "Inspect the data" above.
+- **Rebuild the package**: For releases after 1.1.0, the zip attached to each GitHub release can be rebuilt byte for byte from the tagged source code and compared by its SHA-256 checksum (see "Reproducible Builds" in the README). The copy Chrome installs from the Chrome Web Store is not byte-identical to that zip, because the store adds its own signature and update information.
 
 ---
 
