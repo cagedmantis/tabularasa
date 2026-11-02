@@ -74,8 +74,12 @@ jobs:
         gh release create "$GITHUB_REF_NAME" out/tabularasa-*.zip out/SHA256SUMS \
           --verify-tag --notes-file "$RUNNER_TEMP/notes.md" --title "$GITHUB_REF_NAME"
 
+  # Optional: runs only when the repository variable CWS_ENABLED is 'true'
+  # (a repository variable, because a job's `if` cannot see the environment's).
+  # Otherwise the zip on the GitHub release is uploaded by hand.
   store:
     needs: release
+    if: vars.CWS_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Holds the store settings as variables, and only admits main and v* tags.

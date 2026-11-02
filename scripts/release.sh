@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
 # release.sh — release the extension: version, tag, and hand off to CI, which
-# publishes the GitHub release and submits the package to the Chrome Web Store.
+# publishes the GitHub release and, when enabled, submits the package to the
+# Chrome Web Store.
 #
 # Usage:
 #   scripts/release.sh [major|minor|patch] [options]
@@ -25,8 +26,9 @@
 #   3. Commit the bump and create an annotated tag containing the changelog.
 #   4. Push branch and tag together. The tag starts the Release workflow
 #      (.github/workflows/release.yml): CI on both architectures, a build
-#      provenance attestation, the GitHub release, and the Chrome Web Store
-#      upload and submission for review.
+#      provenance attestation, the GitHub release, and (when the repository
+#      variable CWS_ENABLED is 'true') the Chrome Web Store upload and
+#      submission for review. Otherwise it says how to upload by hand.
 #   5. Watch that workflow, then check that CI's zip has the same checksum as
 #      the one built here.
 #
@@ -43,7 +45,7 @@ CI_WORKFLOW=ci.yml
 RELEASE_WORKFLOW=release.yml
 
 usage() {
-	sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # --- parse arguments ------------------------------------------------------
@@ -129,7 +131,7 @@ if [ "$NO_PUBLISH" -eq 0 ]; then
 fi
 
 if [ "$ASSUME_YES" -ne 1 ]; then
-	if [ "$NO_PUBLISH" -eq 1 ]; then _what="Tag $TAG locally"; else _what="Release $TAG to GitHub and the Chrome Web Store"; fi
+	if [ "$NO_PUBLISH" -eq 1 ]; then _what="Tag $TAG locally"; else _what="Release $TAG"; fi
 	printf '%s? [y/N] ' "$_what" >&2
 	# The terminal when there is one (so piped input cannot answer), else stdin.
 	if (exec < /dev/tty) 2>/dev/null; then read -r ans < /dev/tty; else read -r ans || ans=''; fi
@@ -210,4 +212,12 @@ else
 fi
 
 info "Done — released $TAG: $(gh release view "$TAG" --json url --jq .url)"
-info "Submitted to the Chrome Web Store for review; it goes live when Google approves it."
+_store=$(gh run view "$_id" --json jobs --jq '.jobs[] | select(.name == "store") | .conclusion')
+if [ "$_store" = success ]; then
+	info "Submitted to the Chrome Web Store for review; it goes live when Google approves it."
+else
+	info "Chrome Web Store upload is not automated (CWS_ENABLED is not set). Upload it by hand:"
+	info "  1. https://chrome.google.com/webstore/devconsole → Tabularasa → Package → Upload new package"
+	info "  2. Choose $ARTIFACT (identical to the zip on the GitHub release)"
+	info "  3. Submit for review"
+fi
