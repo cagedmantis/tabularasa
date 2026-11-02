@@ -16,7 +16,7 @@
 # compiler. Node and npm only run the tests and the linter, which still need
 # the TypeScript 6 JS API. Nothing from npm ships.
 
-FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS node
+FROM node:26.12.0-bookworm-slim@sha256:742a0fe7320e09e0321222b68165e6ac731d30470e7ea7f98f9bfc3a6e1034fe AS node
 FROM golang:1.27.3-bookworm@sha256:d9b6a1beb9474adc2a1ce842573639b44b2a0dd49b6669f51d3821baf9ec37c9 AS go
 
 # --- npm toolchain: tests and lint only ---------------------------------------
