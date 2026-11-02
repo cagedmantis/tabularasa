@@ -10,6 +10,7 @@ VERSION := $(shell sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([
 OUT_DIR := out
 DEV_IMAGE := tabularasa-dev
 ASSETS_IMAGE := tabularasa-assets
+STORE_IMAGE := tabularasa-store
 # Run as the host user so files written to mounts stay the user's.
 RUN_AS := --user $(shell id -u):$(shell id -g) -e HOME=/tmp
 # Export a Dockerfile stage's files to a host directory.
@@ -70,10 +71,11 @@ help:
 	@echo "  status         - Show git status and branch info"
 	@echo "  push           - Push changes to remote repository"
 	@echo "  changelog      - Print changelog since the last tag"
-	@echo "  release-preview - Preview next version + changelog (dry-run; BUMP=minor|major|patch)"
-	@echo "  release-minor  - Bump minor version, tag, package, draft GitHub release"
-	@echo "  release-major  - Bump major version, tag, package, draft GitHub release"
-	@echo "  release-patch  - Bump patch version, tag, package, draft GitHub release"
+	@echo "  release        - Release: version, tag, GitHub release and Chrome Web Store (bump inferred; BUMP= overrides)"
+	@echo "  release-preview - Preview next version + changelog (dry-run)"
+	@echo "  release-minor / release-major / release-patch - release with that bump"
+	@echo "  store-check    - Check Chrome Web Store access (needs CWS_* variables)"
+	@echo "  store-publish  - Upload out/ zip to the Chrome Web Store and submit (CI does this)"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  install        - Build the development image (installs dependencies in it)"
@@ -240,10 +242,13 @@ push:
 	@git push origin main
 
 # Release automation (see scripts/ and the "Releasing" section of README.md).
-# Pass extra flags through RELEASE_ARGS, e.g.:
-#   make release-minor RELEASE_ARGS="--no-publish"
-#   make release-major RELEASE_ARGS="--yes"
-BUMP ?= minor
+# `make release` tags and pushes; the Release workflow does the rest. The bump
+# is inferred from the commits unless BUMP is given. Pass extra flags through
+# RELEASE_ARGS, e.g.:
+#   make release BUMP=minor
+#   make release RELEASE_ARGS="--no-publish"   # local commit + tag only
+#   make release RELEASE_ARGS="--yes --no-wait"
+BUMP ?=
 
 .PHONY: changelog
 changelog:
@@ -253,17 +258,33 @@ changelog:
 release-preview:
 	@sh scripts/release.sh $(BUMP) --dry-run
 
-.PHONY: release-minor
-release-minor:
-	@sh scripts/release.sh minor $(RELEASE_ARGS)
+.PHONY: release
+release:
+	@sh scripts/release.sh $(BUMP) $(RELEASE_ARGS)
 
-.PHONY: release-major
-release-major:
-	@sh scripts/release.sh major $(RELEASE_ARGS)
+.PHONY: release-minor release-major release-patch
+release-minor release-major release-patch:
+	@sh scripts/release.sh $(@:release-%=%) $(RELEASE_ARGS)
 
-.PHONY: release-patch
-release-patch:
-	@sh scripts/release.sh patch $(RELEASE_ARGS)
+# Chrome Web Store (tools/cws). CI runs store-publish with a short-lived token
+# from GitHub's OIDC; locally, set CWS_ACCESS_TOKEN (e.g. from gcloud),
+# CWS_PUBLISHER_ID and CWS_EXTENSION_ID.
+STORE_RUN = docker run --rm -e CWS_ACCESS_TOKEN -e CWS_PUBLISHER_ID -e CWS_EXTENSION_ID \
+	-v "$(CURDIR)/$(OUT_DIR):/out:ro" $(STORE_IMAGE)
+
+.PHONY: store-image
+store-image:
+	@docker build --quiet --target store --tag $(STORE_IMAGE) . >/dev/null
+
+.PHONY: store-check
+store-check: store-image
+	@$(STORE_RUN) -check
+
+.PHONY: store-publish
+store-publish: store-image
+	@test -f $(OUT_DIR)/$(EXTENSION_NAME)-$(VERSION).zip \
+		|| { echo "$(OUT_DIR)/$(EXTENSION_NAME)-$(VERSION).zip not found: run make package first"; exit 1; }
+	@$(STORE_RUN) -zip /out/$(EXTENSION_NAME)-$(VERSION).zip
 
 # Dependency management
 .PHONY: install
@@ -308,7 +329,7 @@ check-tools:
 	@command -v docker > /dev/null 2>&1 && echo "✓ Docker installed (required)" || echo "✗ Docker not found (required)"
 	@docker info > /dev/null 2>&1 && echo "✓ Docker is running" || echo "✗ Docker is not running"
 	@command -v git > /dev/null 2>&1 && echo "✓ Git installed (git and release targets)" || echo "✗ Git not found (git and release targets)"
-	@command -v gh > /dev/null 2>&1 && echo "✓ gh installed (GitHub release)" || echo "- gh not found (optional: GitHub release)"
+	@command -v gh > /dev/null 2>&1 && echo "✓ gh installed (release targets)" || echo "✗ gh not found (release targets)"
 	@$(FIND_CHROME) 2>/dev/null; [ -n "$${CHROME:-}" ] && echo "✓ Chrome installed (to run the extension)" || echo "✗ Chrome not found (to run the extension)"
 
 .PHONY: info

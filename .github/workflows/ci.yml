@@ -10,14 +10,17 @@ on:
     # Weekly, so a new advisory in the toolchain is noticed even when no
     # one is opening pull requests.
     - cron: '17 6 * * 1'
+  # The Release workflow runs exactly these checks before it publishes.
+  workflow_call:
 
 # Least privilege: the jobs only read the repository.
 permissions:
   contents: read
 
-# A newer push to the same pull request supersedes the old run.
+# A newer push to the same pull request supersedes the old run. The prefix
+# keeps this group apart from the Release workflow's when it calls this one.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

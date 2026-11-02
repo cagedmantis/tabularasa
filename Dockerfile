@@ -61,13 +61,14 @@ RUN tsc -p tsconfig.json
 FROM source AS check
 RUN npm test && npm run lint && touch /checked
 
-# --- packer: validates the manifest and writes a reproducible zip --------------
+# --- Go tools: pack (validates the manifest, writes a reproducible zip) and ----
+# --- cws (uploads to the Chrome Web Store and submits for review) ---------------
 FROM go AS packer
 ENV GOTOOLCHAIN=local CGO_ENABLED=0 GOFLAGS=-buildvcs=false
 WORKDIR /tools
 COPY tools/ ./
 RUN test -z "$(gofmt -l .)" && go vet ./... && go test ./... \
-    && go build -trimpath -o /usr/local/bin/pack ./pack
+    && go build -trimpath -o /usr/local/bin/ ./pack ./cws
 
 FROM compile AS manifest-check
 COPY --from=packer /usr/local/bin/pack /usr/local/bin/pack
@@ -88,6 +89,12 @@ COPY --from=compile /src/dist/ /
 
 FROM scratch AS coverage
 COPY --from=check /src/tests/coverage/ /
+
+# The store client alone, with CA certificates for HTTPS (make store-publish).
+FROM scratch AS store
+COPY --from=go /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=packer /usr/local/bin/cws /usr/local/bin/cws
+ENTRYPOINT ["cws"]
 
 # --- asset generators (icons, store screenshots) -------------------------------
 # Not part of the extension build. Debian packages come from the snapshot the
