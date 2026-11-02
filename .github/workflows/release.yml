@@ -51,6 +51,8 @@ jobs:
         subject-path: out/tabularasa-*.zip
 
     # Re-runnable: a release that already exists gets its files replaced.
+    # The notes are the tag's changelog, read through the API: there is no
+    # checkout here, and gh's --notes-from-tag only reads local tags.
     - name: Publish the GitHub release
       if: github.ref_type == 'tag'
       env:
@@ -59,10 +61,18 @@ jobs:
       run: |
         if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
           gh release upload "$GITHUB_REF_NAME" out/tabularasa-*.zip out/SHA256SUMS --clobber
-        else
-          gh release create "$GITHUB_REF_NAME" out/tabularasa-*.zip out/SHA256SUMS \
-            --verify-tag --notes-from-tag --title "$GITHUB_REF_NAME"
+          exit 0
         fi
+        tag=$(gh api "repos/$GH_REPO/git/ref/tags/$GITHUB_REF_NAME" --jq '.object | select(.type == "tag") | .sha')
+        if [ -z "$tag" ]; then
+          echo "::error::$GITHUB_REF_NAME is not an annotated tag"
+          exit 1
+        fi
+        # Drop the "Release vX" subject (it is the title) and any signature.
+        gh api "repos/$GH_REPO/git/tags/$tag" --jq .message \
+          | sed -e '1{/^Release v/d;}' -e '/^-----BEGIN [A-Z ]*SIGNATURE-----$/,$d' > "$RUNNER_TEMP/notes.md"
+        gh release create "$GITHUB_REF_NAME" out/tabularasa-*.zip out/SHA256SUMS \
+          --verify-tag --notes-file "$RUNNER_TEMP/notes.md" --title "$GITHUB_REF_NAME"
 
   store:
     needs: release
