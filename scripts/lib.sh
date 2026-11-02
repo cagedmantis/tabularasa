@@ -89,6 +89,21 @@ validate_manifest() {
 	[ "$_got" = "$2" ] || die "manifest version '$_got' does not match release target '$2'"
 }
 
+# Infer the SemVer bump from the Conventional Commits since <since-ref>
+# (empty: the whole history). A breaking change ("type!:" or a
+# "BREAKING CHANGE:" footer) is major, a feature minor, anything else patch.
+infer_bump() {
+	if [ -n "$1" ]; then _range="$1..HEAD"; else _range=HEAD; fi
+	_log=$(git log --no-merges --format='%s%n%b' "$_range")
+	if printf '%s\n' "$_log" | grep -Eq '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE:'; then
+		printf major
+	elif printf '%s\n' "$_log" | grep -Eq '^feat(\([^)]*\))?:'; then
+		printf minor
+	else
+		printf patch
+	fi
+}
+
 # Compute the next version. Usage: semver_bump <major|minor|patch> <X.Y.Z>
 semver_bump() {
 	_type=$1; _cur=$2

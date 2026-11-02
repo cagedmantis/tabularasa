@@ -25,6 +25,7 @@ only Docker. Do not install Node or run npm on the host: use the make targets.
 ### Other Commands
 - `make package` - Build, test, lint and package into out/ (zip, unpacked extension, SHA256SUMS)
 - `make verify-reproducible` - Two clean builds (second for another CPU) must give the same zip
+- `make release` - Release: bump (inferred from Conventional Commits), tag, push; `.github/workflows/release.yml` then publishes the GitHub release and submits to the Chrome Web Store (`tools/cws`). Preview with `make release-preview`
 - `make screenshots` - Generate Chrome Web Store screenshots
 - `make help` - Show all available commands
 

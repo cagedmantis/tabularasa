@@ -1,0 +1,107 @@
+name: Release
+
+# Started by the v* tag that `make release` pushes. Runs the full CI, then
+# publishes the GitHub release and submits the package to the Chrome Web
+# Store. Run it by hand (workflow_dispatch) on main for a dry run: everything
+# runs except the publishing, and the store step only checks its access.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write      # create the GitHub release
+      id-token: write      # sign the provenance attestation
+      attestations: write
+
+    steps:
+    # CI built and compared the zip on x64 and ARM64; this is the x64 copy.
+    - name: Download the package
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: extension-package-X64
+        path: out
+
+    - name: Check the package matches the tag
+      if: github.ref_type == 'tag'
+      run: test -f "out/tabularasa-${GITHUB_REF_NAME#v}.zip"
+
+    # Signed SLSA provenance tying the zip to this workflow and commit:
+    # gh attestation verify <zip> -R <owner>/<repo>
+    - name: Attest build provenance
+      if: github.ref_type == 'tag'
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        subject-path: out/tabularasa-*.zip
+
+    # Re-runnable: a release that already exists gets its files replaced.
+    - name: Publish the GitHub release
+      if: github.ref_type == 'tag'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+          gh release upload "$GITHUB_REF_NAME" out/tabularasa-*.zip out/SHA256SUMS --clobber
+        else
+          gh release create "$GITHUB_REF_NAME" out/tabularasa-*.zip out/SHA256SUMS \
+            --verify-tag --notes-from-tag --title "$GITHUB_REF_NAME"
+        fi
+
+  store:
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Holds the store settings as variables, and only admits main and v* tags.
+    environment: chrome-web-store
+    permissions:
+      contents: read
+      id-token: write      # exchanged with Google for a short-lived token
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Download the package
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: extension-package-X64
+        path: out
+
+    # Workload Identity Federation: no Google key is stored anywhere. The
+    # token is scoped to the Chrome Web Store and expires within the hour.
+    - name: Authenticate to Google
+      id: google
+      uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+      with:
+        workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        token_format: access_token
+        access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+        create_credentials_file: false
+
+    - name: Upload and submit for review
+      env:
+        CWS_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+        CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+        CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
+        TARGET: ${{ github.ref_type == 'tag' && 'store-publish' || 'store-check' }}
+      run: make "$TARGET"
