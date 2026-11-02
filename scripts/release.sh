@@ -131,7 +131,8 @@ fi
 if [ "$ASSUME_YES" -ne 1 ]; then
 	if [ "$NO_PUBLISH" -eq 1 ]; then _what="Tag $TAG locally"; else _what="Release $TAG to GitHub and the Chrome Web Store"; fi
 	printf '%s? [y/N] ' "$_what" >&2
-	if [ -r /dev/tty ]; then read -r ans < /dev/tty; else read -r ans || ans=''; fi
+	# The terminal when there is one (so piped input cannot answer), else stdin.
+	if (exec < /dev/tty) 2>/dev/null; then read -r ans < /dev/tty; else read -r ans || ans=''; fi
 	case "$ans" in y|Y|yes|YES) : ;; *) die "aborted by user" ;; esac
 fi
 
