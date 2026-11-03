@@ -355,7 +355,8 @@ by hand in the [Developer Dashboard](https://chrome.google.com/webstore/devconso
 
 - **Chrome Extension APIs** (Manifest V3): `chrome.tabs`, `chrome.windows`, `chrome.tabGroups`, `chrome.storage.local`, `chrome.action`, and Chrome's local favicon cache
 - **TypeScript**: compiled by the native TypeScript 7 compiler, with no runtime dependencies or bundler
-- **HTML and CSS**: one manager page, no frameworks
+- **HTML and CSS**: one manager page, no frameworks; the "Slate" design, with light and dark themes and stroke icons drawn in code
+- **Geist and Geist Mono** fonts (SIL Open Font License), bundled with the extension
 - **Jest** with jsdom, and **ESLint**, for tests and linting (development only; nothing from npm ships)
 - **Go**: the packaging tool that validates the manifest and writes the reproducible zip
 

@@ -21,6 +21,10 @@ const goodManifest = `{
 
 const goodPage = `<link rel="stylesheet" href="manager.css"><script src="dist/manager.js"></script><a href="#top">`
 
+const goodSheet = `@font-face { src: url("fonts/Geist.woff2") format("woff2"); }
+.logo { background: url(icons/logo.svg); }
+.tick { background: url("data:image/svg+xml,%3Csvg%3E%3C/svg%3E"); }`
+
 // tree writes a built tree with every shipped file, overriding some contents.
 func tree(t *testing.T, overrides map[string]string) string {
 	t.Helper()
@@ -32,6 +36,8 @@ func tree(t *testing.T, overrides map[string]string) string {
 			content = goodManifest
 		case "manager.html":
 			content = goodPage
+		case "manager.css":
+			content = goodSheet
 		}
 		if c, ok := overrides[f]; ok {
 			content = c
@@ -112,13 +118,14 @@ func TestWritesChecksumAndUnpackedExtension(t *testing.T) {
 
 func TestRejectsInvalidTrees(t *testing.T) {
 	cases := map[string]map[string]string{
-		"invalid JSON":         {"manifest.json": `{`},
-		"manifest version 2":   {"manifest.json": strings.Replace(goodManifest, `"manifest_version": 3`, `"manifest_version": 2`, 1)},
-		"bad version":          {"manifest.json": strings.Replace(goodManifest, `"1.2.0"`, `"1.02.0"`, 1)},
-		"unshipped worker":     {"manifest.json": strings.Replace(goodManifest, "dist/background.js", "dist/content.js", 1)},
-		"unshipped icon":       {"manifest.json": strings.Replace(goodManifest, "icons/icon-32.png", "icons/icon-64.png", 1)},
-		"page loads unshipped": {"manager.html": goodPage + `<script src="dist/extra.js"></script>`},
-		"no description":       {"manifest.json": strings.Replace(goodManifest, `"description": "Test",`, "", 1)},
+		"invalid JSON":          {"manifest.json": `{`},
+		"manifest version 2":    {"manifest.json": strings.Replace(goodManifest, `"manifest_version": 3`, `"manifest_version": 2`, 1)},
+		"bad version":           {"manifest.json": strings.Replace(goodManifest, `"1.2.0"`, `"1.02.0"`, 1)},
+		"unshipped worker":      {"manifest.json": strings.Replace(goodManifest, "dist/background.js", "dist/content.js", 1)},
+		"unshipped icon":        {"manifest.json": strings.Replace(goodManifest, "icons/icon-32.png", "icons/icon-64.png", 1)},
+		"page loads unshipped":  {"manager.html": goodPage + `<script src="dist/extra.js"></script>`},
+		"sheet loads unshipped": {"manager.css": goodSheet + `.x { background: url('icons/extra.png'); }`},
+		"no description":        {"manifest.json": strings.Replace(goodManifest, `"description": "Test",`, "", 1)},
 	}
 	for name, overrides := range cases {
 		t.Run(name, func(t *testing.T) {

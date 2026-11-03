@@ -35,7 +35,9 @@ only Docker. Do not install Node or run npm on the host: use the make targets.
 - `src/manager.ts` - **Main TabManager class** (most important file)
 - `src/background.ts` - Background service worker
 - `manifest.json` - Chrome extension configuration (Manifest V3)
-- `manager.html` + `manager.css` - Extension UI
+- `manager.html` + `manager.css` - Extension UI ("Slate" design: colour tokens at the top of manager.css, light and dark)
+- `fonts/` - Geist and Geist Mono (SIL OFL), shipped with the extension; never load fonts or anything else from the network
+- `icons/` - Logo (`logo.svg`) and per-size icon SVGs; `make icons` renders the PNGs
 
 ### Build & Config
 - `Dockerfile` - The build: pinned images, npm toolchain, native tsc, tests, lint, packaging
@@ -51,7 +53,7 @@ only Docker. Do not install Node or run npm on the host: use the make targets.
 ### Documentation & Store
 - `CHROME_STORE_DESCRIPTION.md` - Chrome Web Store listing
 - `PRIVACY_POLICY.md` - Privacy policy (no data collection)
-- `screenshots/` - Chrome Web Store screenshot tools
+- `screenshots/` - Chrome Web Store screenshots, rendered from the real page with a stubbed `chrome` API (`make screenshots`)
 
 ## Development Workflow
 
@@ -64,6 +66,7 @@ only Docker. Do not install Node or run npm on the host: use the make targets.
 - Prefer explicit types over `any`
 - Always add curly braces to if statements
 - Use `const` when variables aren't reassigned
+- UI: colours come from the tokens in `manager.css` (keep text >= 7:1, control edges >= 4.5:1, in light and dark); icons come from `createIcon()` in `src/manager.ts`, not emoji; icon-only buttons need an `aria-label`
 
 ### Adding Tab Operations
 1. Add method to `TabManager` class in `src/manager.ts`

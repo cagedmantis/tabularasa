@@ -17,15 +17,15 @@
             </div>
             <div class="header-controls">
                 <button id="view-toggle" class="btn btn-secondary" title="Toggle between window, group, and domain views">
-                    <span class="icon">🪟</span>
+                    <span class="icon" data-icon="windows"></span>
                     <span class="text">Windows</span>
                 </button>
                 <button id="sessions-toggle" class="btn btn-secondary" title="Manage saved sessions">
-                    <span class="icon">💾</span>
+                    <span class="icon" data-icon="sessions"></span>
                     <span class="text">Sessions</span>
                 </button>
                 <button id="refresh-tabs" class="btn btn-secondary" title="Refresh tab list">
-                    <span class="icon">🔄</span>
+                    <span class="icon" data-icon="refresh"></span>
                     <span class="text">Refresh</span>
                 </button>
             </div>
@@ -35,8 +35,8 @@
         <div class="search-container">
             <div class="search-box">
                 <input type="text" id="search-input" placeholder="Search tabs by title or URL..." class="search-input">
-                <button id="clear-search" class="btn btn-icon" title="Clear search">
-                    <span class="icon">✕</span>
+                <button id="clear-search" class="btn btn-icon" title="Clear search" aria-label="Clear search">
+                    <span class="icon" data-icon="close"></span>
                 </button>
             </div>
             <div class="filter-controls">
@@ -80,15 +80,15 @@
                 <!-- Bottom Actions -->
                 <div class="bottom-actions">
                     <button id="new-tab" class="btn btn-primary">
-                        <span class="icon">➕</span>
+                        <span class="icon" data-icon="plus"></span>
                         New Tab
                     </button>
                     <button id="save-session" class="btn btn-secondary">
-                        <span class="icon">💾</span>
+                        <span class="icon" data-icon="sessions"></span>
                         Save Session
                     </button>
                     <button id="create-tab-group" class="btn btn-secondary">
-                        <span class="icon">📁</span>
+                        <span class="icon" data-icon="groups"></span>
                         Create Group
                     </button>
                 </div>
@@ -142,8 +142,8 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h3>Create Tab Group</h3>
-                    <button id="close-group-modal" class="btn btn-icon">
-                        <span class="icon">✕</span>
+                    <button id="close-group-modal" class="btn btn-icon" title="Close" aria-label="Close">
+                        <span class="icon" data-icon="close"></span>
                     </button>
                 </div>
                 <div class="modal-body">
@@ -183,8 +183,8 @@
         <div id="status-message" class="status-message hidden" role="status">
             <span class="message-text"></span>
             <button class="status-action btn btn-small hidden" type="button"></button>
-            <button class="close-status btn btn-icon">
-                <span class="icon">✕</span>
+            <button class="close-status btn btn-icon" type="button" title="Dismiss" aria-label="Dismiss">
+                <span class="icon" data-icon="close"></span>
             </button>
         </div>
     </div>

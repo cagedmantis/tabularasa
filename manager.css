@@ -1,3 +1,288 @@
+/* Tabularasa manager page: the "Slate" design.
+
+   Black header bar, cool slate greys, one yellow that means "selected".
+   Fonts: Geist and Geist Mono, shipped in fonts/ (SIL OFL; never fetched).
+   Colours are tokens: light first, dark under prefers-color-scheme. Every
+   text pair is >= 7:1 (secondary text included), component edges >= 4.5:1.
+
+   1. Fonts   1b. Tokens   2. Components   3. Direction-specific
+   4. Section actions   5. Accessibility */
+
+@font-face {
+    font-family: "Geist";
+    src: url("fonts/Geist.woff2") format("woff2");
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Geist Mono";
+    src: url("fonts/GeistMono.woff2") format("woff2");
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* ==========================================================================
+   1b. Tokens
+   ========================================================================== */
+:root {
+    --font-sans: "Geist", system-ui, sans-serif;
+    --font-display: var(--font-sans);
+    --font-section: var(--font-mono);
+    --font-mono: "Geist Mono", ui-monospace, monospace;
+    --text-xs: 12.5px;
+    --text-sm: 14px;
+    --text-base: 15px;
+    --text-url: 13px;
+    --title-size: 18px;
+    --title-weight: 600;
+    --title-tracking: -0.01em;
+    --title-row-weight: 500;
+    --btn-weight: 500;
+    --section-size: 13px;
+    --section-weight: 500;
+    --section-tracking: 0.05em;
+    --section-case: uppercase;
+    --radius-sm: 3px;
+    --radius: 4px;
+    --radius-lg: 4px;
+    --radius-pill: 3px;
+    --chip-radius: 2px;
+    --container-max: 1280px;
+    --gutter: 20px;
+    --header-pad: 10px 20px;
+    --list-pad: 0;
+    --section-gap: 0;
+    --section-head-pad: 7px 20px 7px 16px;
+    --row-pad-y: 6px;
+    --row-pad-x: 16px;
+    --logo-size: 24px;
+    --focus-width: 2px;
+    --toast-top: auto;
+    --toast-right: 20px;
+    --toast-bottom: 68px;
+    --toast-left: auto;
+    --toast-enter: 8px;
+    --logo: url("icons/logo.svg");
+}
+
+/* Light */
+:root {
+    color-scheme: light;
+    --bg: #FFFFFF;
+    --surface: #FFFFFF;
+    --surface-2: #F2F4F7;
+    --hover: #F5F7FA;
+    --hover-strong: #E3E7EC;
+    --ink: #0B0D11;
+    --ink-2: #424955;
+    --ink-3: #5E6673;
+    --line: #C5CCD5;
+    --line-row: #DCE1E7;
+    --line-strong: #656E7B;
+    --header-bg: #0B0D11;
+    --header-ink: #F3F5F8;
+    --header-ink-2: #B4BBC6;
+    --header-chip-bg: transparent;
+    --header-rule: 0 solid transparent;
+    --header-btn-border: #848E9D;
+    --header-btn-hover: #1F242C;
+    --header-focus: #FACC15;
+    --badge-bg: #FACC15;
+    --badge-ink: #0B0D11;
+    --badge-border: #FACC15;
+    --accent: #FACC15;
+    --accent-hover: #EAB308;
+    --on-accent: #0B0D11;
+    --btn-bg: transparent;
+    --primary-bg: #0B0D11;
+    --primary-ink: #FFFFFF;
+    --primary-hover: #2B313B;
+    --danger-bg: #B91C1C;
+    --danger-ink: #FFFFFF;
+    --danger-hover: #931616;
+    --danger-text: #B91C1C;
+    --warning-border: #0B0D11;
+    --disabled-ink: #666F7C;
+    --select-bg: #FEF6D2;
+    --select-hover: #FDF0B4;
+    --select-bar: #0B0D11;
+    --active-bar: #656E7B;
+    --chip-bg: #E8ECF0;
+    --chip-ink: #2F3540;
+    --focus: #0B0D11;
+    --toast-bg: #0B0D11;
+    --toast-ink: #F3F5F8;
+    --toast-action-bg: #FACC15;
+    --toast-action-ink: #0B0D11;
+    --toast-action-hover: #FDE047;
+    --toast-focus: #FACC15;
+    --toast-close-hover: rgba(255,255,255,.14);
+    --scrim: rgba(11,13,17,.5);
+    --spinner: #0B0D11;
+    --g-ring: #4B5361;
+    --shadow-1: none;
+    --shadow-2: 0 12px 32px rgba(11,13,17,.22);
+    --section-border: 0 solid transparent;
+    --container-border: 1px solid #DCE1E7;
+    --check-tick: #FFFFFF;
+    --g-grey: #5F6368;
+    --g-blue: #1A73E8;
+    --g-red: #D93025;
+    --g-yellow: #F9AB00;
+    --g-green: #1E8E3E;
+    --g-pink: #D01884;
+    --g-purple: #A142F4;
+    --g-cyan: #007B83;
+    --g-orange: #FA903E;
+    --field-bg: #FFFFFF;
+    --header-btn-bg: transparent;
+    --header-btn-active: #1F242C;
+    --header-btn-active-border: #848E9D;
+    --header-btn-active-ink: #F3F5F8;
+    --btn-ink: #0B0D11;
+    --btn-border: #656E7B;
+    --btn-border-hover: #424955;
+    --btn-hover: #F5F7FA;
+    --secondary-bg: transparent;
+    --secondary-ink: #0B0D11;
+    --secondary-border: #656E7B;
+    --secondary-hover: #F5F7FA;
+    --warning-bg: #FACC15;
+    --warning-ink: #0B0D11;
+    --warning-hover: #EAB308;
+    --disabled-bg: transparent;
+    --disabled-border: #C5CCD5;
+    --active-bg: transparent;
+    --active-label-bg: transparent;
+    --active-label-border: #656E7B;
+    --active-label-ink: #0B0D11;
+    --pinned-bar: transparent;
+    --audible-bar: transparent;
+    --check: #0B0D11;
+    --indicator-bg: transparent;
+    --toast-border: 1px solid transparent;
+    --toast-error-bg: #B91C1C;
+    --toast-error-ink: #FFFFFF;
+    --toast-warning-bg: #FACC15;
+    --toast-warning-ink: #0B0D11;
+    --modal-border: 1px solid #C5CCD5;
+    --shadow-container: none;
+}
+
+/* Dark */
+@media (prefers-color-scheme: dark) {
+    :root {
+            color-scheme: dark;
+            --bg: #0E1116;
+            --surface: #0E1116;
+            --surface-2: #161A21;
+            --hover: #151920;
+            --hover-strong: #232933;
+            --ink: #E8EBF0;
+            --ink-2: #B9C0C9;
+            --ink-3: #929AA5;
+            --line: #343B46;
+            --line-row: #262C35;
+            --line-strong: #87909D;
+            --header-bg: #000000;
+            --header-ink: #E8EBF0;
+            --header-ink-2: #B9C0C9;
+            --header-chip-bg: transparent;
+            --header-rule: 1px solid #262C35;
+            --header-btn-border: #798495;
+            --header-btn-hover: #161A21;
+            --badge-bg: #FACC15;
+            --badge-ink: #0B0D11;
+            --badge-border: #FACC15;
+            --accent: #FACC15;
+            --accent-hover: #FDE047;
+            --on-accent: #0B0D11;
+            --btn-bg: transparent;
+            --primary-bg: #E8EBF0;
+            --primary-ink: #0B0D11;
+            --primary-hover: #C5CBD4;
+            --danger-bg: #F87171;
+            --danger-ink: #0B0D11;
+            --danger-hover: #FCA5A5;
+            --danger-text: #F87171;
+            --disabled-ink: #7D8694;
+            --select-bg: #2A2611;
+            --select-hover: #353013;
+            --select-bar: #FACC15;
+            --active-bar: #B9C0C9;
+            --chip-bg: #1E232B;
+            --chip-ink: #D5DAE1;
+            --check: #FACC15;
+            --focus: #FACC15;
+            --toast-bg: #E8EBF0;
+            --toast-ink: #0B0D11;
+            --toast-action-bg: #0B0D11;
+            --toast-action-ink: #FACC15;
+            --toast-action-hover: #2B313B;
+            --toast-close-hover: rgba(0,0,0,.1);
+            --scrim: rgba(0,0,0,.65);
+            --spinner: #FACC15;
+            --g-ring: #9AA3B0;
+            --shadow-1: none;
+            --shadow-2: 0 12px 32px rgba(0,0,0,.6);
+            --section-border: 0 solid transparent;
+            --container-border: 1px solid #262C35;
+            --check-tick: #0B0D11;
+            --g-grey: #DADCE0;
+            --g-blue: #8AB4F8;
+            --g-red: #F28B82;
+            --g-yellow: #FDD663;
+            --g-green: #81C995;
+            --g-pink: #FF8BCB;
+            --g-purple: #D7AEFB;
+            --g-cyan: #78D9EC;
+            --g-orange: #FCAD70;
+            --field-bg: #0E1116;
+            --header-btn-bg: transparent;
+            --header-btn-active: #161A21;
+            --header-btn-active-border: #798495;
+            --header-btn-active-ink: #E8EBF0;
+            --header-focus: #FACC15;
+            --btn-ink: #E8EBF0;
+            --btn-border: #87909D;
+            --btn-border-hover: #B9C0C9;
+            --btn-hover: #151920;
+            --secondary-bg: transparent;
+            --secondary-ink: #E8EBF0;
+            --secondary-border: #87909D;
+            --secondary-hover: #151920;
+            --warning-bg: #FACC15;
+            --warning-ink: #0B0D11;
+            --warning-hover: #FDE047;
+            --warning-border: #FACC15;
+            --disabled-bg: transparent;
+            --disabled-border: #343B46;
+            --active-bg: transparent;
+            --active-label-bg: transparent;
+            --active-label-border: #B9C0C9;
+            --active-label-ink: #E8EBF0;
+            --pinned-bar: transparent;
+            --audible-bar: transparent;
+            --indicator-bg: transparent;
+            --toast-border: 1px solid transparent;
+            --toast-focus: #0B0D11;
+            --toast-error-bg: #F87171;
+            --toast-error-ink: #0B0D11;
+            --toast-warning-bg: #FACC15;
+            --toast-warning-ink: #0B0D11;
+            --modal-border: 1px solid #343B46;
+            --shadow-container: none;
+    }
+}
+
+
+/* ==========================================================================
+   2. Components. Everything below reads the tokens above; no raw colours.
+   ========================================================================== */
+
 /* Reset and Base Styles */
 * {
     margin: 0;
@@ -6,99 +291,141 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    font-size: 14px;
-    line-height: 1.4;
-    background-color: #f8f9fa;
-    color: #2c3e50;
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: 1.45;
+    background-color: var(--bg);
+    color: var(--ink);
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: var(--font-features, normal);
+}
+
+button, input, select {
+    font: inherit;
+    color: inherit;
+}
+
+::selection {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+/* One focus treatment for every control; components only swap the colour. */
+:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 2px;
 }
 
 .container {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    max-width: 1200px;
+    max-width: var(--container-max);
     margin: 0 auto;
-    background: white;
-    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+    background: var(--surface);
+    border-inline: var(--container-border);
+    box-shadow: var(--shadow-container);
 }
 
 /* Header Styles */
 .header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 16px 24px;
+    background: var(--header-bg);
+    color: var(--header-ink);
+    padding: var(--header-pad);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-bottom: var(--header-rule);
+}
+
+.header :focus-visible {
+    outline-color: var(--header-focus);
 }
 
 .header-left {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
 }
 
 .header h1 {
-    font-size: 24px;
-    font-weight: 600;
+    font-family: var(--font-display);
+    font-size: var(--title-size);
+    font-weight: var(--title-weight);
+    letter-spacing: var(--title-tracking);
+    line-height: 1;
     margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* The mark (icons/logo.svg) sits before the wordmark */
+.header h1::before {
+    content: "";
+    width: var(--logo-size);
+    height: var(--logo-size);
+    flex-shrink: 0;
+    background: var(--logo) center / contain no-repeat;
 }
 
 /* Shown only for an unpacked (development) build */
 .dev-badge {
-    font-size: 12px;
-    font-weight: 700;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
     letter-spacing: 0.04em;
-    padding: 4px 10px;
-    border-radius: 12px;
-    background: #ffc107;
-    color: #212529;
+    padding: 3px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--badge-bg);
+    color: var(--badge-ink);
+    border: 1px dashed var(--badge-border);
 }
 
 .tab-count {
-    font-size: 14px;
-    opacity: 0.9;
-    background: rgba(255,255,255,0.2);
-    padding: 4px 12px;
-    border-radius: 12px;
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--header-ink-2);
+    background: var(--header-chip-bg);
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
 }
 
 .header-controls {
     display: flex;
-    gap: 12px;
+    gap: 8px;
 }
 
 .header-controls .btn {
-    padding: 8px 16px;
-    font-size: 12px;
-    border-radius: 6px;
-    background: rgba(255,255,255,0.2);
-    border: 1px solid rgba(255,255,255,0.3);
-    color: white;
+    padding: 7px 14px;
+    font-size: var(--text-sm);
+    border-radius: var(--radius);
+    background: var(--header-btn-bg);
+    border: 1px solid var(--header-btn-border);
+    color: var(--header-ink);
     cursor: pointer;
-    transition: all 0.2s;
 }
 
 .header-controls .btn:hover {
-    background: rgba(255,255,255,0.3);
+    background: var(--header-btn-hover);
+    transition: background-color 0.15s, border-color 0.15s;
 }
 
 .header-controls .btn.active {
-    background: rgba(255,255,255,0.4);
-    border-color: rgba(255,255,255,0.5);
+    background: var(--header-btn-active);
+    border-color: var(--header-btn-active-border);
+    color: var(--header-btn-active-ink);
 }
 
 /* Search and Filters */
 .search-container {
-    padding: 16px 24px;
-    background: white;
-    border-bottom: 1px solid #e9ecef;
+    padding: 14px var(--gutter);
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
 }
 
 .search-box {
@@ -110,17 +437,32 @@ body {
 
 .search-input {
     flex: 1;
-    padding: 10px 16px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    font-size: 14px;
-    outline: none;
-    transition: border-color 0.2s;
+    padding: 9px 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    font-size: var(--text-base);
+    background: var(--field-bg);
+    color: var(--ink);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.search-input::placeholder,
+.form-input::placeholder {
+    color: var(--ink-2);
+    opacity: 1;
 }
 
 .search-input:focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    border-color: var(--focus);
+}
+
+/* Fields take the same outline ring as every other control. */
+.search-input:focus-visible,
+.form-input:focus-visible,
+.form-select:focus-visible,
+.filter-select:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 1px;
 }
 
 .filter-controls {
@@ -130,10 +472,11 @@ body {
 
 .filter-select {
     padding: 8px 12px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    font-size: 13px;
-    background: white;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    font-size: var(--text-sm);
+    background: var(--field-bg);
+    color: var(--ink);
     cursor: pointer;
 }
 
@@ -156,25 +499,26 @@ body {
 
 /* Global Actions */
 .global-actions {
-    padding: 16px 24px;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e9ecef;
+    padding: 10px var(--gutter);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 10px;
 }
 
 .action-group {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
 }
 
 .selected-count {
-    font-size: 13px;
-    color: #6c757d;
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
     margin-left: 8px;
 }
 
@@ -182,7 +526,8 @@ body {
 .tabs-container {
     flex: 1;
     overflow-y: auto;
-    padding: 16px 24px;
+    padding: var(--list-pad);
+    background: var(--bg);
 }
 
 /* Programmatic focus target only (tabindex="-1"); not a tab stop */
@@ -191,94 +536,127 @@ body {
 }
 
 .tabs-container::-webkit-scrollbar {
-    width: 8px;
+    width: 10px;
 }
 
 .tabs-container::-webkit-scrollbar-track {
-    background: #f1f1f1;
+    background: transparent;
 }
 
 .tabs-container::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 4px;
+    background: var(--line-strong);
+    border: 3px solid var(--bg);
+    border-radius: 5px;
 }
 
 .tabs-container::-webkit-scrollbar-thumb:hover {
-    background: #a1a1a1;
+    background: var(--ink-2);
 }
 
-/* Tab Groups */
+/* Tab Groups (one section per window, Chrome group or domain) */
 .tab-group {
-    margin-bottom: 20px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: var(--section-gap);
+    background: var(--surface);
+    border: var(--section-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
     overflow: hidden;
 }
 
+/* Chrome groups carry their own colour as a left rule. :has() reads the
+   colour chip manager.ts already renders, so no markup change is needed. */
 .tab-group.chrome-group {
-    border-left: 4px solid #4285f4;
+    --group: var(--g-grey);
+    border-left: 4px solid var(--group);
 }
 
+.tab-group.chrome-group:has(.group-color-grey)   { --group: var(--g-grey); }
+.tab-group.chrome-group:has(.group-color-blue)   { --group: var(--g-blue); }
+.tab-group.chrome-group:has(.group-color-red)    { --group: var(--g-red); }
+.tab-group.chrome-group:has(.group-color-yellow) { --group: var(--g-yellow); }
+.tab-group.chrome-group:has(.group-color-green)  { --group: var(--g-green); }
+.tab-group.chrome-group:has(.group-color-pink)   { --group: var(--g-pink); }
+.tab-group.chrome-group:has(.group-color-purple) { --group: var(--g-purple); }
+.tab-group.chrome-group:has(.group-color-cyan)   { --group: var(--g-cyan); }
+.tab-group.chrome-group:has(.group-color-orange) { --group: var(--g-orange); }
+
 .tab-group.chrome-group .tab-group-header {
-    background: #e8f0fe;
+    background: var(--surface-2);
 }
 
 .tab-group-header {
-    background: #f8f9fa;
-    padding: 8px 12px;
-    border-bottom: 1px solid #e9ecef;
+    background: var(--surface-2);
+    padding: var(--section-head-pad);
+    border-bottom: 1px solid var(--line);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
 }
 
 .tab-group-info {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+    min-width: 0;
 }
 
+/* Hue identifies the group as in Chrome's tab strip; the ring gives every
+   hue a >= 3:1 edge against the header, the name beside it carries meaning. */
 .tab-group-color {
     width: 12px;
     height: 12px;
-    border-radius: 50%;
+    border-radius: var(--chip-radius);
     flex-shrink: 0;
+    box-shadow: 0 0 0 1px var(--g-ring);
+    forced-color-adjust: none;
 }
 
 .tab-group-title {
-    font-weight: 600;
-    font-size: 14px;
-    color: #495057;
+    font-family: var(--font-section);
+    font-weight: var(--section-weight);
+    font-size: var(--section-size);
+    letter-spacing: var(--section-tracking);
+    text-transform: var(--section-case);
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .tab-group-count {
-    font-size: 12px;
-    color: #6c757d;
-    background: #e9ecef;
-    padding: 1px 6px;
-    border-radius: 12px;
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--chip-ink);
+    background: var(--chip-bg);
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    white-space: nowrap;
 }
 
 .tab-group-actions {
     display: flex;
-    gap: 6px;
+    gap: 4px;
+    flex-shrink: 0;
 }
 
 .tab-group-actions .btn {
-    padding: 3px 6px;
-    font-size: 11px;
+    padding: 3px 8px;
+    min-height: 26px;
+    font-size: var(--text-xs);
 }
 
 /* Tab Items */
 .tab-item {
-    padding: 12px 16px;
-    border-bottom: 1px solid #f8f9fa;
+    padding: var(--row-pad-y) var(--row-pad-x);
+    border-bottom: 1px solid var(--line-row);
+    /* Fixed-width rule; states only change its colour, so nothing shifts. */
+    border-left: 4px solid transparent;
     display: flex;
     align-items: center;
     gap: 12px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.12s;
     position: relative;
 }
 
@@ -287,84 +665,99 @@ body {
 }
 
 .tab-item:hover {
-    background: #f8f9fa;
-}
-
-.tab-item.active {
-    background: #e3f2fd;
-    border-left: 4px solid #2196f3;
-}
-
-.tab-item.selected {
-    background: #fff3e0;
-    border-left: 4px solid #ff9800;
+    background: var(--hover);
 }
 
 .tab-item.pinned {
-    background: #f3e5f5;
-    border-left: 4px solid #9c27b0;
+    border-left-color: var(--pinned-bar);
 }
 
 .tab-item.audible {
-    background: #e8f5e8;
-    border-left: 4px solid #4caf50;
+    border-left-color: var(--audible-bar);
+}
+
+/* The window's current tab: rule + bold title + an "Active" label (below). */
+.tab-item.active {
+    background: var(--active-bg);
+    border-left-color: var(--active-bar);
+}
+
+.tab-item.active .tab-title {
+    font-weight: 700;
+}
+
+/* Selection wins over every other state; the checked box is the
+   non-colour cue, the fill and rule repeat it. */
+.tab-item.selected {
+    background: var(--select-bg);
+    border-left-color: var(--select-bar);
+}
+
+.tab-item.selected:hover {
+    background: var(--select-hover);
 }
 
 .tab-checkbox {
     width: 18px;
     height: 18px;
+    flex-shrink: 0;
     cursor: pointer;
-    accent-color: #667eea;
+    accent-color: var(--check);
+}
+
+.tab-checkbox:disabled {
+    cursor: not-allowed;
 }
 
 .tab-favicon {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     flex-shrink: 0;
-    border-radius: 2px;
+    border-radius: 3px;
 }
 
 .tab-content {
     flex: 1;
     min-width: 0;
     display: flex;
-    align-items: center;
+    align-items: baseline;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .tab-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #111827;
+    font-size: var(--text-base);
+    font-weight: var(--title-row-weight);
+    color: var(--ink);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     flex-shrink: 0;
-    max-width: 300px;
+    max-width: 340px;
 }
 
 .tab-own-badge {
     flex-shrink: 0;
     margin-left: 8px;
-    padding: 1px 6px;
-    border-radius: 8px;
-    background: #e9ecef;
-    color: #495057;
-    font-size: 11px;
+    padding: 0 7px;
+    border-radius: var(--radius-pill);
+    background: var(--chip-bg);
+    color: var(--chip-ink);
+    font-size: var(--text-xs);
     font-weight: 600;
 }
 
 .tab-separator {
-    color: #9ca3af;
-    margin: 0 6px;
+    color: var(--ink-3);
+    margin: 0 4px;
     flex-shrink: 0;
 }
 
 .tab-url {
-    font-size: 12px;
-    color: #4b5563;
+    font-family: var(--font-mono);
+    font-size: var(--text-url);
+    color: var(--ink-2);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -378,37 +771,56 @@ body {
     gap: 6px;
 }
 
+/* Text label for the active tab, so "active" is never colour alone. */
+.tab-active-badge {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 0 7px;
+    line-height: 18px;
+    border-radius: var(--radius-pill);
+    color: var(--active-label-ink);
+    background: var(--active-label-bg);
+    border: 1px solid var(--active-label-border);
+}
+
+/* Pinned / audible / muted are glyphs (pin, speaker, crossed speaker), so
+   they read without colour; the tinted disc only groups them visually. */
 .tab-indicator {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--radius-pill);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
-    color: white;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--ink-2);
+    background: var(--indicator-bg);
 }
 
 .tab-indicator.pinned {
-    background: #9c27b0;
+    background: var(--indicator-bg);
 }
 
 .tab-indicator.audible {
-    background: #4caf50;
+    background: var(--indicator-bg);
 }
 
 .tab-indicator.muted {
-    background: #f44336;
+    background: var(--indicator-bg);
 }
 
+/* Hidden until the row is hovered OR holds keyboard focus. */
 .tab-actions {
     display: flex;
-    gap: 4px;
+    gap: 2px;
     opacity: 0;
-    transition: opacity 0.2s;
+    transition: opacity 0.12s;
 }
 
-.tab-item:hover .tab-actions {
+.tab-item:hover .tab-actions,
+.tab-item:focus-within .tab-actions {
     opacity: 1;
 }
 
@@ -417,157 +829,174 @@ body {
     height: 28px;
     border: none;
     background: none;
+    color: var(--ink-2);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    transition: all 0.2s;
+    border-radius: var(--radius-sm);
+    transition: background-color 0.12s, color 0.12s;
     font-size: 12px;
 }
 
 .tab-action:hover {
-    background: #e9ecef;
+    background: var(--hover-strong);
+    color: var(--ink);
 }
 
 .tab-action.pinned {
-    color: #9c27b0;
+    color: var(--ink);
 }
 
 .tab-action.muted {
-    color: #f44336;
+    color: var(--danger-text);
 }
 
 .tab-action.close {
-    color: #dc3545;
+    color: var(--ink-2);
 }
 
 .tab-action.close:hover {
-    background: #dc3545;
-    color: white;
+    background: var(--danger-bg);
+    color: var(--danger-ink);
 }
 
 /* Bottom Actions */
 .bottom-actions {
-    padding: 16px 24px;
-    background: white;
-    border-top: 1px solid #e9ecef;
+    padding: 12px var(--gutter);
+    background: var(--surface);
+    border-top: 1px solid var(--line);
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
 }
 
 /* Button Styles */
 .btn {
-    padding: 8px 16px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    background: white;
-    color: #495057;
+    padding: 7px 14px;
+    min-height: 34px;
+    border: 1px solid var(--btn-border);
+    border-radius: var(--radius);
+    background: var(--btn-bg);
+    color: var(--btn-ink);
     cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    transition: all 0.2s;
+    font-size: var(--text-sm);
+    font-weight: var(--btn-weight);
+    line-height: 1.2;
+    /* No transition here: enabling/disabling (e.g. the bulk buttons when a
+       selection starts) must switch instantly, never fade through a
+       half-disabled, low-contrast mix. Only hover eases (see .btn:hover). */
     display: flex;
     align-items: center;
     gap: 6px;
     text-decoration: none;
+    white-space: nowrap;
 }
 
 .btn:hover {
-    background: #f8f9fa;
-    border-color: #adb5bd;
+    background: var(--btn-hover);
+    border-color: var(--btn-border-hover);
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.btn:disabled {
-    opacity: 0.6;
+/* Disabled controls are exempt from WCAG contrast; they stay legible
+   (>= 3:1) and also lose their fill so the change is not opacity alone. */
+.btn:disabled,
+.btn:disabled:hover {
+    background: var(--disabled-bg);
+    border-color: var(--disabled-border);
+    color: var(--disabled-ink);
     cursor: not-allowed;
 }
 
 .btn-primary {
-    background: #667eea;
-    border-color: #667eea;
-    color: white;
+    background: var(--primary-bg);
+    border-color: var(--primary-bg);
+    color: var(--primary-ink);
 }
 
 .btn-primary:hover {
-    background: #5a6fd8;
-    border-color: #5a6fd8;
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
 }
 
 .btn-secondary {
-    background: #6c757d;
-    border-color: #6c757d;
-    color: white;
+    background: var(--secondary-bg);
+    border-color: var(--secondary-border);
+    color: var(--secondary-ink);
 }
 
 .btn-secondary:hover {
-    background: #5a6268;
-    border-color: #5a6268;
+    background: var(--secondary-hover);
+    border-color: var(--secondary-border);
 }
 
 .btn-danger {
-    background: #dc3545;
-    border-color: #dc3545;
-    color: white;
+    background: var(--danger-bg);
+    border-color: var(--danger-bg);
+    color: var(--danger-ink);
 }
 
 .btn-danger:hover {
-    background: #c82333;
-    border-color: #bd2130;
+    background: var(--danger-hover);
+    border-color: var(--danger-hover);
 }
 
 .btn-warning {
-    background: #ffc107;
-    border-color: #ffc107;
-    color: #212529;
+    background: var(--warning-bg);
+    border-color: var(--warning-border);
+    color: var(--warning-ink);
 }
 
 .btn-warning:hover {
-    background: #e0a800;
-    border-color: #d39e00;
+    background: var(--warning-hover);
+    border-color: var(--warning-border);
 }
 
 .btn-small {
-    padding: 6px 12px;
-    font-size: 12px;
+    padding: 5px 11px;
+    min-height: 30px;
+    font-size: var(--text-sm);
 }
 
 .btn-icon {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
     padding: 0;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 /* Session Management */
 .session-header {
-    padding: 20px 24px;
-    background: white;
-    border-bottom: 1px solid #e9ecef;
+    padding: 18px var(--gutter);
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 .session-header h2 {
+    font-family: var(--font-display);
     font-size: 20px;
-    font-weight: 600;
-    color: #2c3e50;
+    font-weight: var(--title-weight);
+    letter-spacing: var(--title-tracking);
+    color: var(--ink);
 }
 
 .session-form {
-    padding: 20px 24px;
-    background: white;
-    border-bottom: 1px solid #e9ecef;
+    padding: 20px var(--gutter);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
 }
 
 .session-form h3 {
     font-size: 16px;
     font-weight: 600;
-    margin-bottom: 16px;
-    color: #2c3e50;
+    margin-bottom: 14px;
+    color: var(--ink);
 }
 
 .form-group {
@@ -577,60 +1006,73 @@ body {
 .form-group label {
     display: block;
     margin-bottom: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    color: #495057;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink);
 }
 
 .form-input, .form-select {
     width: 100%;
-    padding: 10px 12px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    font-size: 14px;
-    outline: none;
-    transition: border-color 0.2s;
+    padding: 9px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    font-size: var(--text-base);
+    background: var(--field-bg);
+    color: var(--ink);
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .form-input:focus, .form-select:focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    border-color: var(--focus);
 }
 
 .radio-group {
     display: flex;
-    gap: 16px;
+    gap: 20px;
 }
 
+/* Higher specificity than .form-group label so the options sit inline. */
+.form-group .radio-label,
 .radio-label {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 13px;
+    gap: 8px;
+    margin-bottom: 0;
+    font-size: var(--text-base);
+    font-weight: 400;
     cursor: pointer;
+}
+
+.radio-label input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--check);
 }
 
 .form-actions {
     display: flex;
-    gap: 12px;
+    gap: 8px;
     justify-content: flex-end;
 }
 
 .sessions-list {
     flex: 1;
     overflow-y: auto;
-    padding: 16px 24px;
+    padding: var(--list-pad);
+    background: var(--bg);
 }
 
 .session-item {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-bottom: 12px;
-    padding: 16px 20px;
+    background: var(--surface);
+    border: var(--section-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
+    margin-bottom: 10px;
+    padding: 14px 18px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 16px;
 }
 
 .session-info {
@@ -639,20 +1081,21 @@ body {
 }
 
 .session-name {
-    font-size: 14px;
-    font-weight: 500;
-    color: #2c3e50;
-    margin-bottom: 4px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 2px;
 }
 
 .session-details {
-    font-size: 12px;
-    color: #6c757d;
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
 }
 
 .session-actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
 }
 
 /* Modal Styles */
@@ -662,7 +1105,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0,0,0,0.5);
+    background: var(--scrim);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -670,54 +1113,60 @@ body {
 }
 
 .modal-content {
-    background: white;
-    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink);
+    border: var(--modal-border);
+    border-radius: var(--radius-lg);
     width: 90%;
-    max-width: 500px;
+    max-width: 480px;
     max-height: 80%;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    box-shadow: var(--shadow-2);
 }
 
 .modal-header {
-    padding: 20px 24px;
-    border-bottom: 1px solid #e9ecef;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--line);
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 .modal-header h3 {
+    font-family: var(--font-display);
     font-size: 18px;
-    font-weight: 600;
-    color: #2c3e50;
+    font-weight: var(--title-weight);
+    letter-spacing: var(--title-tracking);
+    color: var(--ink);
 }
 
 .modal-body {
     flex: 1;
-    padding: 20px 24px;
+    padding: 20px 22px 4px;
     overflow-y: auto;
 }
 
 .modal-footer {
-    padding: 20px 24px;
-    border-top: 1px solid #e9ecef;
+    padding: 14px 22px;
+    border-top: 1px solid var(--line);
+    background: var(--surface-2);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     display: flex;
     justify-content: flex-end;
-    gap: 12px;
+    gap: 8px;
 }
 
-/* Tab Group Colors */
-.group-color-grey { background-color: #9e9e9e; }
-.group-color-blue { background-color: #2196f3; }
-.group-color-red { background-color: #f44336; }
-.group-color-yellow { background-color: #ffeb3b; }
-.group-color-green { background-color: #4caf50; }
-.group-color-pink { background-color: #e91e63; }
-.group-color-purple { background-color: #9c27b0; }
-.group-color-cyan { background-color: #00bcd4; }
-.group-color-orange { background-color: #ff9800; }
+/* Tab Group Colors: Chrome's own tab-strip hues, per colour scheme */
+.group-color-grey { background-color: var(--g-grey); }
+.group-color-blue { background-color: var(--g-blue); }
+.group-color-red { background-color: var(--g-red); }
+.group-color-yellow { background-color: var(--g-yellow); }
+.group-color-green { background-color: var(--g-green); }
+.group-color-pink { background-color: var(--g-pink); }
+.group-color-purple { background-color: var(--g-purple); }
+.group-color-cyan { background-color: var(--g-cyan); }
+.group-color-orange { background-color: var(--g-orange); }
 
 /* Loading Indicator */
 .loading {
@@ -729,16 +1178,17 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 12px;
-    color: #6c757d;
+    color: var(--ink-2);
+    font-size: var(--text-sm);
 }
 
 .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid #f3f3f3;
-    border-top: 3px solid #667eea;
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--line);
+    border-top-color: var(--spinner);
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    animation: spin 0.9s linear infinite;
 }
 
 @keyframes spin {
@@ -746,46 +1196,103 @@ body {
     100% { transform: rotate(360deg); }
 }
 
-/* Status Messages */
+/* Status Messages (toast; the Undo button lives here) */
 .status-message {
     position: fixed;
-    top: 20px;
-    right: 20px;
-    background: #28a745;
-    color: white;
-    padding: 12px 16px;
-    border-radius: 6px;
+    top: var(--toast-top);
+    right: var(--toast-right);
+    bottom: var(--toast-bottom);
+    left: var(--toast-left);
+    max-width: 440px;
+    background: var(--toast-bg);
+    color: var(--toast-ink);
+    border: var(--toast-border);
+    padding: 8px 8px 8px 16px;
+    border-radius: var(--radius);
     display: flex;
     align-items: center;
-    gap: 12px;
-    font-size: 13px;
+    gap: 10px;
+    font-size: var(--text-sm);
+    font-weight: 500;
     z-index: 1001;
-    animation: slideIn 0.3s ease-out;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    animation: slideIn 0.22s ease-out;
+    box-shadow: var(--shadow-2);
+}
+
+/* A leading glyph per type, so success / warning / error differ by shape too. */
+.status-message::before {
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.status-message.success::before {
+    /* Drawn tick: not every font has U+2713. */
+    content: "";
+    width: 5px;
+    height: 10px;
+    margin: 0 3px 3px 2px;
+    border: solid currentColor;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+.status-message.warning::before { content: "!"; }
+.status-message.error::before   { content: "\00D7"; }
+
+.status-message .message-text {
+    flex: 1;
 }
 
 .status-action {
-    background: rgba(255, 255, 255, 0.9);
-    color: #212529;
-    font-weight: 600;
+    background: var(--toast-action-bg);
+    border-color: var(--toast-action-bg);
+    color: var(--toast-action-ink);
+    font-weight: 700;
+}
+
+.status-action:hover {
+    background: var(--toast-action-hover);
+    border-color: var(--toast-action-hover);
+}
+
+.status-message .close-status {
+    background: transparent;
+    border-color: transparent;
+    color: inherit;
+}
+
+.status-message .close-status:hover {
+    background: var(--toast-close-hover);
+    border-color: transparent;
+}
+
+.status-message :focus-visible {
+    outline-color: var(--toast-focus);
 }
 
 .status-message.error {
-    background: #dc3545;
+    background: var(--toast-error-bg);
+    color: var(--toast-error-ink);
+    border-color: var(--toast-error-bg);
 }
 
 .status-message.warning {
-    background: #ffc107;
-    color: #212529;
+    background: var(--toast-warning-bg);
+    color: var(--toast-warning-ink);
+    border-color: var(--toast-warning-bg);
+}
+
+.status-message.error :focus-visible,
+.status-message.warning :focus-visible {
+    outline-color: currentColor;
 }
 
 @keyframes slideIn {
     from {
-        transform: translateX(100%);
+        transform: translateY(var(--toast-enter));
         opacity: 0;
     }
     to {
-        transform: translateX(0);
+        transform: translateY(0);
         opacity: 1;
     }
 }
@@ -797,10 +1304,44 @@ body {
 
 .icon {
     font-size: 14px;
+    line-height: 1;
+    display: inline-flex;
+}
+
+/* Stroke icons (createIcon in src/manager.ts), sized by the font size. */
+.icon-svg {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.tab-action .icon-svg {
+    width: 16px;
+    height: 16px;
+}
+
+.tab-indicator .icon-svg {
+    width: 13px;
+    height: 13px;
+}
+
+/* Filled pin = pinned; outline pin = "Pin tab". */
+.tab-action.pinned .icon-svg,
+.tab-indicator.pinned .icon-svg {
+    fill: currentColor;
+}
+
+.empty-state .icon-svg {
+    stroke-width: 1.5;
 }
 
 .text-muted {
-    color: #6c757d !important;
+    color: var(--ink-2) !important;
 }
 
 .text-center {
@@ -809,24 +1350,26 @@ body {
 
 .empty-state {
     text-align: center;
-    padding: 60px 20px;
-    color: #6c757d;
+    padding: 72px 20px;
+    color: var(--ink-2);
 }
 
 .empty-state .icon {
-    font-size: 48px;
+    font-size: 40px;
     margin-bottom: 16px;
     display: block;
 }
 
 .empty-state h3 {
+    font-family: var(--font-display);
     font-size: 18px;
-    margin-bottom: 12px;
-    color: #495057;
+    font-weight: var(--title-weight);
+    margin-bottom: 8px;
+    color: var(--ink);
 }
 
 .empty-state p {
-    font-size: 14px;
+    font-size: var(--text-base);
     line-height: 1.6;
 }
 
@@ -835,39 +1378,41 @@ body {
     .container {
         max-width: 100%;
     }
-    
+
     .header {
         flex-direction: column;
         gap: 12px;
         align-items: stretch;
     }
-    
+
     .header-controls {
         justify-content: center;
     }
-    
+
     .search-container {
         flex-direction: column;
         gap: 12px;
+        align-items: stretch;
     }
-    
+
     .global-actions {
         flex-direction: column;
         align-items: stretch;
     }
-    
+
     .action-group {
         justify-content: center;
+        flex-wrap: wrap;
     }
-    
+
     .tabs-container {
         padding: 12px 16px;
     }
-    
+
     .tab-item {
         padding: 12px;
     }
-    
+
     .bottom-actions {
         flex-direction: column;
         gap: 8px;
@@ -876,5 +1421,303 @@ body {
 
 /* Keep the destructive bucket action apart from the selection buttons */
 .tab-group-actions .btn-danger {
-    margin-left: 16px;
+    margin-left: 12px;
+}
+
+/* ==========================================================================
+   3. Slate: one continuous table, mono section labels, yellow = selected
+   ========================================================================== */
+
+.header h1 {
+    font-weight: 600;
+}
+
+.header-controls .btn {
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    font-weight: 500;
+}
+
+/* Sections are bands of one table, not cards. Every section reserves the
+   4px rule so Chrome-group colours line up with plain windows. */
+.tab-group {
+    border-left: 4px solid transparent;
+    border-radius: 0;
+    overflow: visible;
+}
+
+.tab-group-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+}
+
+.tab-group:first-child .tab-group-header {
+    border-top: none;
+}
+
+.tab-group-title {
+    color: var(--ink);
+}
+
+.tab-group-count {
+    background: transparent;
+    padding: 0;
+    color: var(--ink-2);
+    font-family: var(--font-mono);
+}
+
+.tab-group-count::before {
+    content: "/ ";
+}
+
+.tab-item {
+    min-height: 38px;
+}
+
+.tab-title {
+    max-width: 420px;
+}
+
+.btn {
+    min-height: 32px;
+}
+
+.btn-small {
+    min-height: 28px;
+}
+
+.bottom-actions {
+    padding: 10px 20px;
+}
+
+.session-header {
+    padding: 14px 20px;
+}
+
+.session-item {
+    border-radius: 0;
+    margin: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 12px 20px;
+}
+
+.sessions-list {
+    padding: 0;
+}
+
+.session-name {
+    font-weight: 500;
+}
+
+.session-details {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+}
+
+.modal-content {
+    border-radius: var(--radius);
+}
+
+.modal-footer {
+    border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.status-message {
+    font-family: var(--font-sans);
+}
+
+/* ==========================================================================
+   3b. Slate · Refined: one step larger, crisper structure.
+   Sizes come from the shared tokens (+1px across the scale); the rules
+   below cover the few sizes base.css sets in px, the row height, the title
+   cap and a drawn checkbox (Chrome's native box ignores our border tokens).
+   ========================================================================== */
+
+/* 38 -> 40px rows: 15px text needs ~1.5px more line box; the extra 0.5px
+   per side keeps the same air above and below the title. */
+.tab-item {
+    min-height: 40px;
+}
+
+/* 420px * 15/14: long titles truncate at the same character as before. */
+.tab-title {
+    max-width: 450px;
+}
+
+.dev-badge {
+    font-size: 12px;
+}
+
+.tab-indicator {
+    font-size: 12px;
+}
+
+.tab-action {
+    font-size: 13px;
+}
+
+.icon {
+    font-size: 15px;
+}
+
+.session-header h2 {
+    font-size: 21px;
+}
+
+.session-form h3 {
+    font-size: 17px;
+}
+
+.modal-header h3 {
+    font-size: 19px;
+}
+
+.session-name {
+    font-size: 16px;
+}
+
+.empty-state h3 {
+    font-size: 19px;
+}
+
+/* Section action links ("Select All", "Unselect All") read as quiet links
+   but stay AAA (--ink-2), and gain an underline on hover. */
+.tab-group-actions .btn-secondary:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+/* Drawn checkbox: 1.5px --line-strong edge (>= 4.5:1), filled --check with
+   a --check-tick mark when checked. Same 18px box, same keyboard behaviour. */
+.tab-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    border: 1.5px solid var(--line-strong);
+    border-radius: 3px;
+    background: var(--field-bg) no-repeat center / 12px 12px;
+    display: inline-grid;
+    place-content: center;
+}
+
+.tab-checkbox:hover:not(:disabled) {
+    border-color: var(--ink);
+}
+
+.tab-checkbox:checked {
+    background-color: var(--check);
+    border-color: var(--check);
+}
+
+.tab-checkbox:checked::after {
+    content: "";
+    width: 5px;
+    height: 9px;
+    margin-top: -2px;
+    border: solid var(--check-tick);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* The Tabularasa row itself: visibly unavailable, not just faint. */
+.tab-checkbox:disabled {
+    border-style: dashed;
+    background: transparent;
+}
+
+@media (forced-colors: active) {
+    .tab-checkbox {
+        border-color: CanvasText;
+    }
+
+    .tab-checkbox:checked {
+        background-color: Highlight;
+        border-color: Highlight;
+    }
+
+    .tab-checkbox:checked::after {
+        border-color: HighlightText;
+    }
+}
+
+
+/* ==========================================================================
+   4. Quiet section actions (shared by all three directions): the per-section
+      buttons repeat on every header, so they are text buttons until hovered
+      or focused; "Close All" keeps its red text so it never reads as neutral.
+   ========================================================================== */
+.tab-group-actions .btn-secondary {
+    background: transparent;
+    border-color: transparent;
+    color: var(--ink-2);
+}
+
+.tab-group-actions .btn-secondary:hover {
+    background: var(--hover-strong);
+    border-color: transparent;
+    color: var(--ink);
+}
+
+.tab-group-actions .btn-danger {
+    background: transparent;
+    border-color: var(--danger-text);
+    color: var(--danger-text);
+}
+
+.tab-group-actions .btn-danger:hover {
+    background: var(--danger-bg);
+    border-color: var(--danger-bg);
+    color: var(--danger-ink);
+}
+
+/* ==========================================================================
+   5. Accessibility guards
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    /* Keep a non-moving loading cue: the "Loading..." text stays, the ring
+       is drawn complete instead of spinning. */
+    .spinner {
+        border-color: var(--spinner);
+    }
+}
+
+/* Windows High Contrast / forced colours: state rules are borders (kept,
+   recoloured by the system), the selection gets the system Highlight. */
+@media (forced-colors: active) {
+    .tab-item.selected {
+        border-left-color: Highlight;
+        outline: 1px solid Highlight;
+        outline-offset: -1px;
+    }
+
+    .tab-item.active {
+        border-left-color: CanvasText;
+    }
+
+    .tab-actions {
+        opacity: 1;
+    }
+
+    .btn:disabled {
+        color: GrayText;
+        border-color: GrayText;
+    }
+
+    .header h1::before {
+        forced-color-adjust: none;
+    }
 }

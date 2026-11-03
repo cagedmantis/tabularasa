@@ -25,9 +25,10 @@ make screenshots  # regenerates screenshots/*.png if needed
 
 - **Store icon (128x128)**: `icons/icon-128.png`
 - **Screenshots (1280x800)**:
-  - `screenshots/screenshot-1.png` — main interface with domain grouping
-  - `screenshots/screenshot-2.png` — search/filter in action
-  - `screenshots/screenshot-3.png` — bulk selection and actions
+  - `screenshots/screenshot-1.png` — window view with a bulk selection
+  - `screenshots/screenshot-2.png` — tab group view
+  - `screenshots/screenshot-3.png` — search, in the dark theme
+  - `screenshots/screenshot-4.png` — saved sessions
 - **Small promo tile (440x280, optional)**: `screenshots/promo-small-440x280.png`
 
 ## Privacy tab

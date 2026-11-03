@@ -120,6 +120,66 @@ describe('TabManager', () => {
             await createManager({ tabs: [] });
 
             expect(document.querySelector('.empty-state')).not.toBeNull();
+            expect(document.querySelector('.empty-state svg')).not.toBeNull();
+        });
+
+        test('icons are hidden SVGs, and every icon-only button is named', async () => {
+            await createManager({
+                tabs: [createMockTab({ id: 1, pinned: true, audible: true, mutedInfo: { muted: true } })]
+            });
+
+            // Static markup asks for icons by name; startup draws them.
+            expect(document.querySelectorAll('[data-icon]:empty')).toHaveLength(0);
+            document.querySelectorAll('svg').forEach(svg => {
+                expect(svg.getAttribute('aria-hidden')).toBe('true');
+            });
+            // Hidden buttons (the toast's action) get their text when shown.
+            [...document.querySelectorAll('button')].filter(b => !b.closest('.hidden')).forEach(button => {
+                const name = button.getAttribute('aria-label') || button.textContent.trim();
+                expect({ id: button.id || button.className, name }).not.toEqual(
+                    expect.objectContaining({ name: '' }));
+            });
+
+            const row = document.querySelector('.tab-item');
+            const labels = [...row.querySelectorAll('.tab-action')].map(b => b.getAttribute('aria-label'));
+            expect(labels).toEqual(['Unpin tab', 'Unmute tab', 'Close tab']);
+            const states = [...row.querySelectorAll('.tab-indicator')].map(i => i.getAttribute('aria-label'));
+            expect(states).toEqual(['Pinned', 'Playing audio', 'Muted']);
+        });
+
+        test('no emoji are left in the page', async () => {
+            await createManager({
+                tabs: [createMockTab({ id: 1, pinned: true, audible: true })]
+            });
+            // Each of the three views, then the sessions view.
+            for (let i = 0; i < 3; i++) {
+                expect(document.body.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+                document.getElementById('view-toggle').click();
+            }
+            document.getElementById('sessions-toggle').click();
+            expect(document.body.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+        });
+
+        test('the active tab carries a text label, not only a colour', async () => {
+            await createManager({
+                tabs: [
+                    createMockTab({ id: 1, active: true, title: 'Current' }),
+                    createMockTab({ id: 2, active: false, title: 'Other' })
+                ]
+            });
+            const badge = title => [...document.querySelectorAll('.tab-item')]
+                .find(row => row.querySelector('.tab-title').textContent === title)
+                .querySelector('.tab-active-badge');
+
+            expect(badge('Current').textContent).toBe('Active');
+            expect(badge('Other')).toBeNull();
+        });
+
+        test('counts are singular for one', async () => {
+            await createManager({ tabs: [createMockTab({ id: 1 })] });
+
+            expect(document.getElementById('tab-count').textContent).toBe('1 tab');
+            expect(document.querySelector('.tab-group-count').textContent).toBe('1 tab');
         });
 
         test('search filters tabs by title or URL', async () => {
@@ -1392,7 +1452,7 @@ describe('TabManager', () => {
 
             expect(document.querySelectorAll('.tab-item')).toHaveLength(1);
             expect(document.body.textContent).not.toContain('Private');
-            expect(document.getElementById('tab-count').textContent).toBe('1 tabs');
+            expect(document.getElementById('tab-count').textContent).toBe('1 tab');
         });
 
         test('saving all windows skips incognito windows', async () => {

@@ -74,6 +74,50 @@ interface SessionInfo {
     }[];
 }
 
+// Icons: one stroke-drawn set (24px grid, currentColor) instead of emoji, so
+// they follow the theme's colours and contrast. Static markup asks for one
+// with <span class="icon" data-icon="name">; code calls createIcon().
+const ICONS = {
+    windows: ['M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', 'M3 9h18'],
+    groups: ['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'],
+    domains: ['M21 12a9 9 0 1 1-18 0a9 9 0 1 1 18 0z', 'M3 12h18',
+        'M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9s1.3-6.5 3.8-9z'],
+    sessions: ['M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M8 3v5h7V3', 'M7 21v-7h10v7'],
+    refresh: ['M20 12a8 8 0 1 1-2.34-5.66', 'M20 4v5h-5'],
+    close: ['M6 6l12 12', 'M18 6L6 18'],
+    plus: ['M12 5v14', 'M5 12h14'],
+    search: ['M18 11a7 7 0 1 1-14 0a7 7 0 1 1 14 0z', 'M20 20l-4-4'],
+    pin: ['M12 16v5', 'M8 3h8l-1 6 3 4v2H6v-2l3-4z'],
+    sound: ['M4 9h4l5-4v14l-5-4H4z', 'M16.5 9a4 4 0 0 1 0 6', 'M19 6.5a7.5 7.5 0 0 1 0 11'],
+    muted: ['M4 9h4l5-4v14l-5-4H4z', 'M16 9l5 6', 'M21 9l-5 6']
+} as const;
+
+type IconName = keyof typeof ICONS;
+
+function createIcon(name: IconName): SVGSVGElement {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('class', 'icon-svg');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    for (const d of ICONS[name]) {
+        const path = document.createElementNS(ns, 'path');
+        path.setAttribute('d', d);
+        svg.appendChild(path);
+    }
+    return svg;
+}
+
+// "1 tab", "2 tabs".
+function countOf(count: number, noun: string): string {
+    return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+function isIconName(name: string): name is IconName {
+    return Object.prototype.hasOwnProperty.call(ICONS, name);
+}
+
 // Global state
 class TabManager {
     // Closing this many tabs at once (or any tab hidden by the current
@@ -170,6 +214,7 @@ class TabManager {
     }
 
     private async init(): Promise<void> {
+        this.renderStaticIcons();
         this.markDevelopmentBuild();
         this.setupEventListeners();
         // Subscribe before the first load so nothing that happens while it
@@ -195,6 +240,15 @@ class TabManager {
      * drop), which is not how this extension is distributed and would cost
      * no more than a wrong badge.
      */
+    private renderStaticIcons(): void {
+        document.querySelectorAll<HTMLElement>('[data-icon]').forEach(slot => {
+            const name = slot.dataset.icon ?? '';
+            if (isIconName(name)) {
+                slot.replaceChildren(createIcon(name));
+            }
+        });
+    }
+
     private markDevelopmentBuild(): void {
         try {
             const manifest = chrome.runtime.getManifest();
@@ -779,7 +833,7 @@ class TabManager {
         
         const count = document.createElement('span');
         count.className = 'tab-group-count';
-        count.textContent = `${tabs.length} tabs`;
+        count.textContent = countOf(tabs.length, 'tab');
         groupInfo.appendChild(count);
         
         header.appendChild(groupInfo);
@@ -893,50 +947,52 @@ class TabManager {
         const indicators = document.createElement('div');
         indicators.className = 'tab-indicators';
         
+        // A text label, so the active tab is never marked by colour alone.
+        if (tab.active) {
+            const activeBadge = document.createElement('span');
+            activeBadge.className = 'tab-active-badge';
+            activeBadge.textContent = 'Active';
+            indicators.appendChild(activeBadge);
+        }
+
+        const indicator = (state: string, icon: IconName, label: string): void => {
+            const element = document.createElement('div');
+            element.className = `tab-indicator ${state}`;
+            element.setAttribute('role', 'img');
+            element.setAttribute('aria-label', label);
+            element.title = label;
+            element.appendChild(createIcon(icon));
+            indicators.appendChild(element);
+        };
         if (tab.pinned) {
-            const pinIndicator = document.createElement('div');
-            pinIndicator.className = 'tab-indicator pinned';
-            pinIndicator.textContent = '📌';
-            indicators.appendChild(pinIndicator);
+            indicator('pinned', 'pin', 'Pinned');
         }
-        
         if (tab.audible) {
-            const audioIndicator = document.createElement('div');
-            audioIndicator.className = 'tab-indicator audible';
-            audioIndicator.textContent = '🔊';
-            indicators.appendChild(audioIndicator);
+            indicator('audible', 'sound', 'Playing audio');
         }
-        
         if (tab.mutedInfo?.muted) {
-            const muteIndicator = document.createElement('div');
-            muteIndicator.className = 'tab-indicator muted';
-            muteIndicator.textContent = '🔇';
-            indicators.appendChild(muteIndicator);
+            indicator('muted', 'muted', 'Muted');
         }
-        
+
         tabElement.appendChild(indicators);
 
         // Create actions
         const actions = document.createElement('div');
         actions.className = 'tab-actions';
         
-        const pinBtn = document.createElement('button');
-        pinBtn.className = `tab-action ${tab.pinned ? 'pinned' : ''}`;
-        pinBtn.title = `${tab.pinned ? 'Unpin' : 'Pin'} tab`;
-        pinBtn.textContent = tab.pinned ? '📌' : '📍';
-        actions.appendChild(pinBtn);
-        
-        const muteBtn = document.createElement('button');
-        muteBtn.className = `tab-action ${tab.mutedInfo?.muted ? 'muted' : ''}`;
-        muteBtn.title = `${tab.mutedInfo?.muted ? 'Unmute' : 'Mute'} tab`;
-        muteBtn.textContent = tab.mutedInfo?.muted ? '🔇' : '🔊';
-        actions.appendChild(muteBtn);
-        
-        const closeBtn = document.createElement('button');
-        closeBtn.className = 'tab-action close';
-        closeBtn.title = 'Close tab';
-        closeBtn.textContent = '✕';
-        actions.appendChild(closeBtn);
+        const action = (className: string, icon: IconName, label: string): HTMLButtonElement => {
+            const button = document.createElement('button');
+            button.className = className;
+            button.title = label;
+            button.setAttribute('aria-label', label);
+            button.appendChild(createIcon(icon));
+            actions.appendChild(button);
+            return button;
+        };
+        action(`tab-action ${tab.pinned ? 'pinned' : ''}`, 'pin', `${tab.pinned ? 'Unpin' : 'Pin'} tab`);
+        action(`tab-action ${tab.mutedInfo?.muted ? 'muted' : ''}`, tab.mutedInfo?.muted ? 'muted' : 'sound',
+            `${tab.mutedInfo?.muted ? 'Unmute' : 'Mute'} tab`);
+        action('tab-action close', 'close', 'Close tab');
         
         tabElement.appendChild(actions);
 
@@ -979,13 +1035,22 @@ class TabManager {
     }
 
     private renderEmptyState(): void {
-        this.elements.tabsContainer.innerHTML = `
-            <div class="empty-state">
-                <span class="icon">🔍</span>
-                <h3>No tabs found</h3>
-                <p>Try adjusting your search query or filter settings.</p>
-            </div>
-        `;
+        this.elements.tabsContainer.replaceChildren(this.createEmptyState(
+            'search', 'No tabs found', 'Try adjusting your search query or filter settings.'));
+    }
+
+    private createEmptyState(icon: IconName, heading: string, text: string): HTMLElement {
+        const state = document.createElement('div');
+        state.className = 'empty-state';
+        const iconSlot = document.createElement('span');
+        iconSlot.className = 'icon';
+        iconSlot.appendChild(createIcon(icon));
+        const title = document.createElement('h3');
+        title.textContent = heading;
+        const paragraph = document.createElement('p');
+        paragraph.textContent = text;
+        state.append(iconSlot, title, paragraph);
+        return state;
     }
 
     private renderSessions(): void {
@@ -993,13 +1058,8 @@ class TabManager {
         if (!sessionsList) {return;}
         
         if (this.sessions.length === 0) {
-            sessionsList.innerHTML = `
-                <div class="empty-state">
-                    <span class="icon">💾</span>
-                    <h3>No saved sessions</h3>
-                    <p>Save your current tabs to quickly restore them later.</p>
-                </div>
-            `;
+            sessionsList.replaceChildren(this.createEmptyState(
+                'sessions', 'No saved sessions', 'Save your current tabs to quickly restore them later.'));
             return;
         }
 
@@ -1031,7 +1091,7 @@ class TabManager {
 
         const details = document.createElement('div');
         details.className = 'session-details';
-        details.textContent = `${tabCount} tabs • ${windowCount} windows • ${new Date(session.created).toLocaleDateString()}`;
+        details.textContent = `${countOf(tabCount, 'tab')} • ${countOf(windowCount, 'window')} • ${new Date(session.created).toLocaleDateString()}`;
         info.appendChild(details);
 
         const actions = document.createElement('div');
@@ -1142,17 +1202,19 @@ class TabManager {
     }
 
     private updateViewToggle(): void {
-        const views: Record<ViewType, { icon: string; text: string }> = {
-            windows: { icon: '🪟', text: 'Windows' },
-            groups: { icon: '📁', text: 'Groups' },
-            domains: { icon: '🌐', text: 'Domains' }
+        const views: Record<ViewType, string> = {
+            windows: 'Windows',
+            groups: 'Groups',
+            domains: 'Domains'
         };
-        const { icon, text } = views[this.currentView];
+        const iconSlot = document.createElement('span');
+        iconSlot.className = 'icon';
+        iconSlot.appendChild(createIcon(this.currentView));
+        const label = document.createElement('span');
+        label.className = 'text';
+        label.textContent = views[this.currentView];
 
-        this.elements.viewToggle.innerHTML = `
-            <span class="icon">${icon}</span>
-            <span class="text">${text}</span>
-        `;
+        this.elements.viewToggle.replaceChildren(iconSlot, label);
     }
 
     private toggleSessionView(): void {
@@ -1224,7 +1286,7 @@ class TabManager {
         const totalTabs = this.tabs.length;
         const selectedCount = this.selectedTabs.size;
         
-        this.elements.tabCount.textContent = `${totalTabs} tabs`;
+        this.elements.tabCount.textContent = countOf(totalTabs, 'tab');
         const hiddenCount = this.countHidden(Array.from(this.selectedTabs));
         this.elements.selectedCount.textContent = hiddenCount > 0
             ? `${selectedCount} selected (${hiddenCount} hidden by filter)`
@@ -1749,7 +1811,7 @@ class TabManager {
             const tabIds = tabsInGroup.map(tab => tab.id);
             if (!isNonEmpty(tabIds)) {return;}
             await chrome.tabs.ungroup(tabIds);
-            this.showStatusMessage(`Ungrouped ${tabIds.length} tabs`);
+            this.showStatusMessage(`Ungrouped ${countOf(tabIds.length, 'tab')}`);
             await this.refreshTabs();
         } catch (error) {
             console.error('Error ungrouping tabs:', error);
