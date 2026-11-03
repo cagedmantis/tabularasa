@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
-"""Render Chrome Web Store screenshots (1280x800 PNG) with headless Chrome.
+"""Render the Chrome Web Store screenshots (1280x800 PNG) and the small promo
+tile (440x280) with headless Chrome.
 
-Builds scenario variants of screenshots/generate_screenshots.html and
-captures each one, plus a 440x280 small promotional tile. Outputs land in
-the screenshots/ directory.
+The screenshots are the real extension: manager.html, manager.css and
+dist/manager.js (run `make build` first), with screenshots/stub-chrome.js
+standing in for the chrome.* APIs with demo tabs. A small server on
+127.0.0.1 serves the repository and answers the favicon requests with letter
+tiles, so nothing is fetched from the network. Run through `make screenshots`.
 """
 
+import hashlib
+import html
+import http.server
 import os
 import shutil
 import subprocess
 import sys
-import tempfile
+import threading
+import urllib.parse
 
 SCREENSHOTS_DIR = os.path.dirname(os.path.abspath(__file__))
-DEMO_HTML = os.path.join(SCREENSHOTS_DIR, 'generate_screenshots.html')
+ROOT = os.path.dirname(SCREENSHOTS_DIR)
 
 CHROME_CANDIDATES = [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -23,104 +30,110 @@ CHROME_CANDIDATES = [
     'chromium',
 ]
 
-# Strip the demo chrome (title bar, padding, shadows) so the container fills
-# the viewport exactly at 1280x800.
-BASE_CSS = """
-<style>
-  body { margin: 0; padding: 0; background: #fff; }
-  .screenshot-title { display: none; }
-  .screenshot-container {
-    margin: 0; width: 1280px; height: 800px;
-    border-radius: 0; box-shadow: none;
-  }
-  .demo-highlight, .demo-annotation { display: none; }
-</style>
-"""
-
-# Pad each domain group with extra mock tabs so the counts shown in the
-# group headers (5 / 3 / 4) match what is visible.
-FILL_JS = """
-<script>
-  var extras = [
-    ['Pull Requests - tabularasa', 'github.com/user/tabularasa/pulls'],
-    ['GitHub Actions - CI runs', 'github.com/user/tabularasa/actions'],
-    ['Manifest V3 service worker lifecycle', 'stackoverflow.com/questions/mv3-service-worker'],
-    ['chrome.tabs API reference', 'developer.chrome.com/docs/extensions/reference/api/tabs'],
-    ['chrome.tabGroups API reference', 'developer.chrome.com/docs/extensions/reference/api/tabGroups'],
-    ['Manifest V3 migration guide', 'developer.chrome.com/docs/extensions/develop/migrate'],
-  ];
-  var groupFor = [0, 0, 1, 2, 2, 2];
-  var groups = document.querySelectorAll('.tab-group');
-  extras.forEach(function (extra, i) {
-    var group = groups[groupFor[i]];
-    var item = group.querySelector('.tab-item:last-child').cloneNode(true);
-    item.classList.remove('active', 'selected');
-    item.querySelector('.tab-checkbox').checked = false;
-    item.querySelector('.tab-title').textContent = extra[0];
-    item.querySelector('.tab-url').textContent = extra[1];
-    group.appendChild(item);
-  });
-</script>
-"""
-
-SEARCH_SCENARIO_JS = """
-<script>
-  document.querySelector('.search-input').value = 'github';
-  document.querySelectorAll('.tab-group').forEach(function (group) {
-    var title = group.querySelector('.tab-group-title').textContent;
-    if (title.indexOf('github') === -1) { group.style.display = 'none'; }
-  });
-  document.querySelector('.tab-count').textContent = '5 matching tabs';
-  document.querySelector('.selected-count').textContent = '1 selected';
-  document.querySelectorAll('.btn-danger').forEach(function (btn) {
-    if (btn.textContent.indexOf('Close Selected') !== -1) {
-      btn.textContent = 'Close Selected (1)';
+# Run after the manager has rendered: each drives the real UI.
+SELECT_GROUP_JS = """
+  document.querySelectorAll('.tab-item').forEach(function (row) {
+    var title = row.querySelector('.tab-title').textContent;
+    if (/pull request|tabGroups/i.test(title)) {
+      row.querySelector('.tab-checkbox').click();
     }
   });
-</script>
 """
+GROUPS_VIEW_JS = "document.getElementById('view-toggle').click();"
+SEARCH_JS = """
+  var input = document.getElementById('search-input');
+  input.value = 'github';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+"""
+SESSIONS_JS = "document.getElementById('sessions-toggle').click();"
 
-BULK_SCENARIO_JS = """
-<script>
-  var items = document.querySelectorAll('.tab-item');
-  items.forEach(function (item) {
-    item.classList.remove('active');
-    item.classList.add('selected');
-    item.querySelector('.tab-checkbox').checked = true;
-  });
-  document.querySelector('.selected-count').textContent = items.length + ' selected';
-  document.querySelectorAll('.btn-danger').forEach(function (btn) {
-    if (btn.textContent.indexOf('Close Selected') !== -1) {
-      btn.textContent = 'Close Selected (' + items.length + ')';
-    }
-  });
-</script>
-"""
+# (file, scheme, scenario)
+SHOTS = [
+    ('screenshot-1.png', 'light', SELECT_GROUP_JS),
+    ('screenshot-2.png', 'light', GROUPS_VIEW_JS),
+    ('screenshot-3.png', 'dark', SEARCH_JS),
+    ('screenshot-4.png', 'light', SESSIONS_JS),
+]
 
 PROMO_TILE_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <style>
+  @font-face { font-family: "Geist"; src: url("/fonts/Geist.woff2") format("woff2"); font-weight: 100 900; }
   body {
     margin: 0; width: 440px; height: 280px; overflow: hidden;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    display: flex; flex-direction: column; align-items: center;
-    justify-content: center; color: white;
+    background: #0B0D11; color: #E8EBF0;
+    font-family: "Geist", system-ui, sans-serif;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 48px; box-sizing: border-box;
   }
-  img { width: 96px; height: 96px; margin-bottom: 16px; }
-  h1 { margin: 0 0 8px; font-size: 36px; font-weight: 600; letter-spacing: 1px; }
-  p { margin: 0; font-size: 15px; opacity: 0.9; }
+  img { width: 72px; height: 72px; margin-bottom: 24px; }
+  h1 { margin: 0 0 8px; font-size: 34px; font-weight: 600; letter-spacing: -0.01em; }
+  p { margin: 0; font-size: 16px; color: #B9C0C9; }
+  p b { color: #FACC15; font-weight: 500; }
 </style>
 </head>
 <body>
-  <img src="ICON_SRC" alt="">
+  <img src="/icons/logo.svg" alt="">
   <h1>Tabularasa</h1>
-  <p>Advanced tab &amp; window management for Chrome</p>
+  <p>Every tab, every window, one list. <b>All local.</b></p>
 </body>
 </html>
 """
+
+TILE_COLORS = ['#3B4A63', '#4B5361', '#5B4A6B', '#2F5A57', '#6B4F3A', '#3F5B3A', '#5A3B4E']
+
+
+def favicon_svg(page_url):
+    """A letter tile for the page's host, standing in for its favicon."""
+    host = urllib.parse.urlparse(page_url).hostname or '?'
+    name = host[4:] if host.startswith('www.') else host
+    color = TILE_COLORS[int(hashlib.sha256(name.encode()).hexdigest(), 16) % len(TILE_COLORS)]
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'
+        '<rect width="32" height="32" rx="6" fill="%s"/>'
+        '<text x="16" y="22" text-anchor="middle" font-family="sans-serif" font-size="18" '
+        'font-weight="700" fill="#FFFFFF">%s</text></svg>' % (color, html.escape(name[0].upper()))
+    ).encode()
+
+
+def shot_page(origin, scenario):
+    """manager.html with the stub API before the real script and the scenario after it."""
+    with open(os.path.join(ROOT, 'manager.html')) as f:
+        page = f.read()
+    stub = ('<script>window.STUB_ORIGIN = %r;</script>\n'
+            '    <script src="screenshots/stub-chrome.js"></script>\n'
+            '    <script src="dist/manager.js"></script>' % origin)
+    scenario = ('\n    <script>setTimeout(function () {%s}, 400);</script>' % scenario) if scenario else ''
+    assert '<script src="dist/manager.js"></script>' in page
+    return page.replace('<script src="dist/manager.js"></script>', stub + scenario).encode()
+
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    pages = {}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=ROOT, **kwargs)
+
+    def do_GET(self):
+        url = urllib.parse.urlparse(self.path)
+        if url.path == '/_favicon/':
+            page_url = urllib.parse.parse_qs(url.query).get('pageUrl', [''])[0]
+            return self.respond(favicon_svg(page_url), 'image/svg+xml')
+        if url.path in self.pages:
+            return self.respond(self.pages[url.path], 'text/html; charset=utf-8')
+        return super().do_GET()
+
+    def respond(self, body, content_type):
+        self.send_response(200)
+        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
 
 
 def find_chrome():
@@ -131,23 +144,25 @@ def find_chrome():
     return None
 
 
-def capture(chrome, html_path, out_path, width, height):
+def capture(chrome, url, out_path, width, height, scheme='light'):
     result = subprocess.run(
         [
             chrome, '--headless=new', '--disable-gpu', '--hide-scrollbars',
             '--force-device-scale-factor=1',
+            '--run-all-compositor-stages-before-draw', '--virtual-time-budget=5000',
+            *(['--force-dark-mode', '--blink-settings=preferredColorScheme=0'] if scheme == 'dark' else []),
             # Set by the Docker assets image, where Chrome's sandbox cannot run.
             *os.environ.get('CHROME_EXTRA_FLAGS', '').split(),
             '--window-size=%d,%d' % (width, height),
             '--screenshot=%s' % out_path,
-            'file://%s' % html_path,
+            url,
         ],
         capture_output=True, text=True,
     )
     if result.returncode != 0 or not os.path.exists(out_path):
         print('Chrome failed for %s:\n%s' % (out_path, result.stderr))
         return False
-    print('Created %s' % out_path)
+    print('Created %s' % os.path.relpath(out_path, ROOT))
     return True
 
 
@@ -156,34 +171,27 @@ def main():
     if not chrome:
         print('Google Chrome not found; cannot capture screenshots.')
         return 1
+    if not os.path.exists(os.path.join(ROOT, 'dist', 'manager.js')):
+        print('dist/manager.js is missing; run make build first.')
+        return 1
 
-    with open(DEMO_HTML) as f:
-        demo = f.read()
-    demo = demo.replace('</head>', BASE_CSS + '</head>')
-
-    scenarios = [
-        ('screenshot-1.png', FILL_JS),
-        ('screenshot-2.png', FILL_JS + SEARCH_SCENARIO_JS),
-        ('screenshot-3.png', FILL_JS + BULK_SCENARIO_JS),
-    ]
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    origin = 'http://127.0.0.1:%d' % server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
 
     ok = True
-    with tempfile.TemporaryDirectory() as tmp:
-        for name, scenario_js in scenarios:
-            html = demo.replace('</body>', scenario_js + '</body>')
-            html_path = os.path.join(tmp, name.replace('.png', '.html'))
-            with open(html_path, 'w') as f:
-                f.write(html)
+    try:
+        for name, scheme, scenario in SHOTS:
+            path = '/__%s.html' % name[:-4]
+            Handler.pages[path] = shot_page(origin, scenario)
             out = os.path.join(SCREENSHOTS_DIR, name)
-            ok = capture(chrome, html_path, out, 1280, 800) and ok
+            ok = capture(chrome, origin + path, out, 1280, 800, scheme) and ok
 
-        icon = os.path.join(SCREENSHOTS_DIR, '..', 'icons', 'icon-128.png')
-        tile_html = PROMO_TILE_HTML.replace('ICON_SRC', 'file://%s' % os.path.abspath(icon))
-        tile_path = os.path.join(tmp, 'promo-tile.html')
-        with open(tile_path, 'w') as f:
-            f.write(tile_html)
+        Handler.pages['/__promo.html'] = PROMO_TILE_HTML.encode()
         out = os.path.join(SCREENSHOTS_DIR, 'promo-small-440x280.png')
-        ok = capture(chrome, tile_path, out, 440, 280) and ok
+        ok = capture(chrome, origin + '/__promo.html', out, 440, 280) and ok
+    finally:
+        server.shutdown()
 
     return 0 if ok else 1
 

@@ -15,5 +15,7 @@
 !src/
 !tests/
 !icons/*.png
+!icons/logo.svg
+!fonts/
 !tools/
 tests/coverage/

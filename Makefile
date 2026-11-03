@@ -219,7 +219,7 @@ validate-manifest:
 	@docker build --quiet --target manifest-check . >/dev/null && echo "✅ Manifest is valid and everything it references ships"
 
 .PHONY: screenshots
-screenshots: assets-image
+screenshots: build assets-image
 	@echo "Generating Chrome Web Store screenshots..."
 	@docker run --rm $(RUN_AS) -v "$(CURDIR):/work" $(ASSETS_IMAGE) python3 screenshots/capture.py
 

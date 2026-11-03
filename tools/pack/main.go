@@ -37,10 +37,15 @@ var shipped = []string{
 	"LICENSE",
 	"dist/background.js",
 	"dist/manager.js",
+	"fonts/Geist.woff2",
+	"fonts/GeistMono.woff2",
+	"fonts/OFL-Geist-Mono.txt",
+	"fonts/OFL-Geist.txt",
 	"icons/icon-128.png",
 	"icons/icon-16.png",
 	"icons/icon-32.png",
 	"icons/icon-48.png",
+	"icons/logo.svg",
 	"manager.css",
 	"manager.html",
 	"manifest.json",
@@ -48,6 +53,9 @@ var shipped = []string{
 
 // pages are the shipped HTML files whose local references must also ship.
 var pages = []string{"manager.html"}
+
+// stylesheets are the shipped CSS files whose url() references must also ship.
+var stylesheets = []string{"manager.css"}
 
 // epoch is the timestamp of every zip entry. Chrome ignores it; a constant
 // keeps the zip independent of when and where it was built.
@@ -124,11 +132,18 @@ func validate(root string) (*manifest, error) {
 		}
 	}
 	for _, page := range pages {
-		pageRefs, err := localRefs(filepath.Join(root, page))
+		pageRefs, err := localRefs(filepath.Join(root, page), refPattern)
 		if err != nil {
 			return nil, err
 		}
 		refs = append(refs, pageRefs...)
+	}
+	for _, sheet := range stylesheets {
+		sheetRefs, err := localRefs(filepath.Join(root, sheet), urlPattern)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, sheetRefs...)
 	}
 	for _, ref := range refs {
 		if ref != "" && !isShipped(ref) {
@@ -153,16 +168,20 @@ func validVersion(v string) bool {
 	return true
 }
 
-var refPattern = regexp.MustCompile(`(?:src|href)="([^"]+)"`)
+var (
+	refPattern = regexp.MustCompile(`(?:src|href)="([^"]+)"`)
+	urlPattern = regexp.MustCompile(`url\(\s*["']?([^"')]+)["']?\s*\)`)
+)
 
-// localRefs returns the relative URLs an HTML file loads.
-func localRefs(file string) ([]string, error) {
+// localRefs returns the relative URLs a page or stylesheet loads, as matched
+// by pattern.
+func localRefs(file string, pattern *regexp.Regexp) ([]string, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
 	}
 	var refs []string
-	for _, match := range refPattern.FindAllSubmatch(data, -1) {
+	for _, match := range pattern.FindAllSubmatch(data, -1) {
 		ref := string(match[1])
 		if strings.Contains(ref, ":") || strings.HasPrefix(ref, "#") {
 			continue
