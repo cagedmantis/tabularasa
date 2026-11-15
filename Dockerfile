@@ -99,7 +99,7 @@ ENTRYPOINT ["cws"]
 # --- asset generators (icons, store screenshots) -------------------------------
 # Not part of the extension build. Debian packages come from the snapshot the
 # base image was built from, so they are pinned with it.
-FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3 AS assets
+FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc AS assets
 RUN sed -i -n '/^# http:\/\/snapshot/{s/^# /URIs: /;p;n;d};p' /etc/apt/sources.list.d/debian.sources \
     && apt-get -o Acquire::Check-Valid-Until=false update \
     && apt-get install -y --no-install-recommends \
